@@ -1,0 +1,29 @@
+[0m[[0m[0mdebug[0m] [0m[0mPackaging /home/eaj123/Isabellm/Test/target/scala-2.12/test_2.12-0.1.0-SNAPSHOT.jar ...[0m
+[0m[[0m[0mdebug[0m] [0m[0mInput file mappings:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	de[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/de[0m
+[0m[[0m[0mdebug[0m] [0m[0m	de/unruh[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/de/unruh[0m
+[0m[[0m[0mdebug[0m] [0m[0m	de/unruh/isabelle[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/de/unruh/isabelle[0m
+[0m[[0m[0mdebug[0m] [0m[0m	de/unruh/isabelle/main.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/de/unruh/isabelle/main.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	de/unruh/isabelle/main$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/de/unruh/isabelle/main$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	isabellm$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/isabellm$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	isabellm.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/isabellm.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	extract.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/extract.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	inject.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/inject.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	errorCases.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/errorCases.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	extract$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/extract$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	errorCases$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/errorCases$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	inject$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/inject$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0mDone packaging.[0m
