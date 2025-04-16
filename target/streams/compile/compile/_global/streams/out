@@ -1,4 +1,9 @@
-[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/test.scala:101:51: too many arguments (2) for method split: (toSplit: CharSequence)Array[String][0m
-[0m[[0m[31merror[0m] [0m[0m            val parts = pattern.split(llm_output, 2)  // limit = 2 to avoid over-splitting[0m
-[0m[[0m[31merror[0m] [0m[0m                                                  ^[0m
-[0m[[0m[31merror[0m] [0m[0mone error found[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/TheoryManager.scala:69:8: object creation impossible, since method newOps in trait OperationCollection of type (implicit isabelle: de.unruh.isabelle.control.Isabelle)TheoryManager.Ops is not defined[0m
+[0m[[0m[31merror[0m] [0m[0mobject TheoryManager extends OperationCollection {[0m
+[0m[[0m[31merror[0m] [0m[0m       ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/TheoryManager.scala:87:26: method newOps overrides nothing.[0m
+[0m[[0m[31merror[0m] [0m[0mNote: the super classes of object TheoryManager contain the following, non final members named newOps:[0m
+[0m[[0m[31merror[0m] [0m[0mprotected def newOps(implicit isabelle: de.unruh.isabelle.control.Isabelle): TheoryManager.Ops[0m
+[0m[[0m[31merror[0m] [0m[0m  override protected def newOps(implicit isabelle: Isabelle, ec: scala.concurrent.ExecutionContext) = {[0m
+[0m[[0m[31merror[0m] [0m[0m                         ^[0m
+[0m[[0m[31merror[0m] [0m[0mtwo errors found[0m
