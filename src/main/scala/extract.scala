@@ -1,4 +1,9 @@
+import java.io.File
+import scala.io.Source
 
+
+// Functionality for extracting information from a .thy file
+// Using data from error messages when running isabelle build
 
 object extract {
 
@@ -18,7 +23,7 @@ object extract {
     "hence ", "thus ", "obtain ", "show ", "ultimately ", "moreover ", "then "
     )
     
-
+    // Extracts A Statement from a .thy file using the Path and Error line *********************************8
     def extractStatement(filePath: String, errorLine: Int): String = {
         val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
 
@@ -48,7 +53,9 @@ object extract {
 
         statementLines.mkString("\n")
     }
-
+    
+    // Extracts the path to the file that produced the error
+    // And the line number the error took place *************************************************************
     def extractLineAndPath(errorMessage: String): Option[(Int, String)] = {
         val pattern = """line (\d+) of "(.+?\.thy)"""".r
 
@@ -92,6 +99,8 @@ object extract {
         intermediate.mkString("\n")
     }
 
+    // Extracts everything within a Statement
+    // Includes the Statement name, the statement itself, and the proof of the statement******************
     def extractAll(filePath: String, errorLine: Int): String = {
 
         val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
@@ -121,7 +130,8 @@ object extract {
 
         statementLines.mkString("\n")
     }
-
+    
+    // Extracts everything in the .thy file before the Statement we are working on************************
     def extractThy(filePath: String, errorLine: Int): String = {
         val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
 
@@ -138,11 +148,43 @@ object extract {
         linesBeforeStatement.mkString("\n")
     }
 
+    //Extracts the line  from the file
     def extractLine(filePath: String, errorLine: Int): String = {
 
         val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
 
         if (errorLine >= 1 && errorLine <= lines.length) lines(errorLine - 1)
         else ""
+    }
+
+    // Returns the name of Statement
+    // Use on the output of extractStatement! ********************************************************** 
+    def extractName(statement: String): String = {
+        val keywords = Set("lemma", "theorem", "proposition", "corollary")
+        val keywordPattern = keywords.mkString("|")
+        val pattern = s"""^\\s*($keywordPattern)\\s+(\\w+).*""".r
+
+        // Use print to debug each line being checked
+        statement.linesIterator.foreach(line => println(s"Checking: '$line'"))
+
+        statement.linesIterator.collectFirst {
+            case pattern(_, name) => name
+        }.getOrElse("default_name")
+    }
+
+    // Extracts everything from a thy file
+    def extractText(filePath: String): String = {
+        val file = new File(filePath)
+
+        if (!file.exists || !file.getName.endsWith(".thy")) {
+            throw new IllegalArgumentException(s"Invalid file: $filePath")
+        }
+
+        val source = Source.fromFile(file)
+        try {
+            source.getLines().mkString("\n")
+        } finally {
+            source.close()
+        }
     }
 }

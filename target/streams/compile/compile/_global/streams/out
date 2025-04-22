@@ -1,9 +1,7 @@
-[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/TheoryManager.scala:69:8: object creation impossible, since method newOps in trait OperationCollection of type (implicit isabelle: de.unruh.isabelle.control.Isabelle)TheoryManager.Ops is not defined[0m
-[0m[[0m[31merror[0m] [0m[0mobject TheoryManager extends OperationCollection {[0m
-[0m[[0m[31merror[0m] [0m[0m       ^[0m
-[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/TheoryManager.scala:87:26: method newOps overrides nothing.[0m
-[0m[[0m[31merror[0m] [0m[0mNote: the super classes of object TheoryManager contain the following, non final members named newOps:[0m
-[0m[[0m[31merror[0m] [0m[0mprotected def newOps(implicit isabelle: de.unruh.isabelle.control.Isabelle): TheoryManager.Ops[0m
-[0m[[0m[31merror[0m] [0m[0m  override protected def newOps(implicit isabelle: Isabelle, ec: scala.concurrent.ExecutionContext) = {[0m
-[0m[[0m[31merror[0m] [0m[0m                         ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/extract.scala:174:24: not found: type File[0m
+[0m[[0m[31merror[0m] [0m[0m        val file = new File(filePath)[0m
+[0m[[0m[31merror[0m] [0m[0m                       ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/extract.scala:180:22: not found: value Source[0m
+[0m[[0m[31merror[0m] [0m[0m        val source = Source.fromFile(file)[0m
+[0m[[0m[31merror[0m] [0m[0m                     ^[0m
 [0m[[0m[31merror[0m] [0m[0mtwo errors found[0m

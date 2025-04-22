@@ -2,9 +2,12 @@ import scala.sys.process._
 import scala.util.{Try, Success, Failure}
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.io.PrintWriter
+import java.io.File
 
 import extract._
 import inject._
+import history._
+import sledgehammer._
 
 object isabellm {
   def main(args: Array[String]): Unit = {
@@ -28,7 +31,7 @@ object isabellm {
       val exitCodeTry = Try {
         Seq("bash", "-c", command).!(logger)
       }
-
+      
       exitCodeTry match {
 
         case Success(0) =>
@@ -46,25 +49,34 @@ object isabellm {
             .mkString("\n")
           println("❗ Extracted Isabelle errors:")
           println(isabelleErrors)
+
+          val (lineNum, filePath) = extract.extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
+          val thy = extract.extractThy(filePath, lineNum)
+          val statement = extract.extractStatement(filePath, lineNum)
+          val line = extract.extractLine(filePath, lineNum)
+
+          // initialise json file for LLM history
+          val name = extract.extractName(statement)
+          val json_path = s"history/$name.json"
+          val jsonFile = new File(json_path)
+          if (!jsonFile.exists()) {
+            history.jsonCreate(name)
+          }
+          
           
           if (isabelleErrors.contains("quick_and_dirty")) {
             
             println("Sorry detected in lemma, sending to llm for proof.")
             println(s"LLM Iteration ${iter + 1} of $maxIters")
 
-            val (lineNum, filePath) = extract.extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
-            val thy = extract.extractThy(filePath, lineNum)
-            val lemma = extract.extractStatement(filePath, lineNum)
-            val line = extract.extractLine(filePath, lineNum)
-            val mode = 0  // First call to llm for this lemma
-
             //Call the Python script and pass the file path
-            val pythonCommand: Seq[String] = Seq("python3", "src/main/python/send_to_llm.py", thy, lemma, isabelleErrors, line, mode.toString)
+            val pythonCommand: Seq[String] = 
+              Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
             val llm_output = pythonCommand.!!
             iter += 1
 
             val pattern = "===OUTPUT===\\s*".r
-            val parts = pattern.split(llm_output)  // limit = 2 to avoid over-splitting
+            val parts = pattern.split(llm_output)
 
             val inputPart = parts.headOption.map(_.replace("===INPUT===", "").trim).getOrElse("")
             val outputPart = parts.lift(1).getOrElse("").trim
@@ -81,36 +93,40 @@ object isabellm {
           else if (isabelleErrors.contains("Failed to apply initial proof method")) {
             
             println("Proof Failed. Making changes...")
-
-            val (lineNum, filePath) = extract.extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
-            val thy = extract.extractThy(filePath, lineNum)
-            val lemma = extract.extractStatement(filePath, lineNum)
-            val line = extract.extractLine(filePath, lineNum)
-            val mode = 1  // First call to llm for this lemma
             
-            // SLEDGEHAMMER HERE *****************************************************************************
-            // If sledgehammer solves, finish here
-            // Else, send to LLM
-            //Call the Python script and pass the file path
-            println("Sending to llm for proof...")
-            println(s"LLM Iteration ${iter + 1} of $maxIters")
 
-            val pythonCommand: Seq[String] = Seq("python3", "src/main/python/send_to_llm.py", thy, lemma, isabelleErrors, line, mode.toString)
-            val llm_output = pythonCommand.!!
-            iter += 1
+            val all_text = extract.extractText(filePath)
+            val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
 
-            val pattern = "===OUTPUT===\\s*".r
-            val parts = pattern.split(llm_output)  // limit = 2 to avoid over-splitting
+            if (success) {
+              
+              println("Sledgehammer found a solution!")
 
-            val inputPart = parts.headOption.map(_.replace("===INPUT===", "").trim).getOrElse("")
-            val outputPart = parts.lift(1).getOrElse("").trim
+            } else {
+              
+              println("Sledgehammer failed to find a solution.")
+              println("Sending to llm for proof...")
+              println(s"LLM Iteration ${iter + 1} of $maxIters")
 
-            //println("Input:")
-            //println(inputPart)
-            println("LLM OUTPUT************************************")
-            println(outputPart)
+              val pythonCommand: Seq[String] = 
+                Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
+              val llm_output = pythonCommand.!!
+              iter += 1
 
-            inject.injectLemma(outputPart, filePath, lineNum)
+              val pattern = "===OUTPUT===\\s*".r
+              val parts = pattern.split(llm_output)  // limit = 2 to avoid over-splitting
+
+              val inputPart = parts.headOption.map(_.replace("===INPUT===", "").trim).getOrElse("")
+              val outputPart = parts.lift(1).getOrElse("").trim
+
+              //println("Input:")
+              //println(inputPart)
+              println("LLM OUTPUT************************************")
+              println(outputPart)
+
+              inject.injectLemma(outputPart, filePath, lineNum)
+
+            }
 
           }
 

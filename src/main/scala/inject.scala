@@ -1,5 +1,9 @@
 import java.nio.file.{Files, Paths}
 import java.nio.charset.StandardCharsets
+import scala.io.Source
+import java.io.{PrintWriter, File}
+
+// Functionality for injecting information into a .thy file
 
 object inject {
 
@@ -47,5 +51,23 @@ object inject {
 
         // Write the updated content back to the file
         Files.write(Paths.get(filePath), updatedLines.mkString("\n").getBytes(StandardCharsets.UTF_8))
+    }
+
+    def injectLine(filePath: String, lineNumber: Int, newText: String): Unit = {
+        // Read all lines from the file
+        val lines = Source.fromFile(filePath).getLines().toList
+
+        // Check if the lineNumber is valid
+        if (lineNumber >= 1 && lineNumber <= lines.length) {
+            // Modify the specific line
+            val updatedLines = lines.updated(lineNumber - 1, newText)
+
+            // Write the updated content back to the file
+            val writer = new PrintWriter(new File(filePath))
+            updatedLines.foreach(writer.println)
+            writer.close()
+        } else {
+            println(s"Error: Line number $lineNumber is out of bounds.")
+        }
     }
 }
