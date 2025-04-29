@@ -4,10 +4,13 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 import java.io.PrintWriter
 import java.io.File
 
+import ujson._
 import extract._
 import inject._
 import history._
 import sledgehammer._
+import llmOutput._
+import undefined._
 
 object isabellm {
   def main(args: Array[String]): Unit = {
@@ -48,7 +51,9 @@ object isabellm {
             .map(_.trim.stripPrefix("***").trim)
             .mkString("\n")
           println("❗ Extracted Isabelle errors:")
+          println("********************************")
           println(isabelleErrors)
+          println("********************************")
 
           val (lineNum, filePath) = extract.extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
           val thy = extract.extractThy(filePath, lineNum)
@@ -63,7 +68,7 @@ object isabellm {
             history.jsonCreate(name)
           }
           
-          
+          // SORRY DETECTED IN PROOF ************************************************************************
           if (isabelleErrors.contains("quick_and_dirty")) {
             
             println("Sorry detected in lemma, sending to llm for proof.")
@@ -73,63 +78,95 @@ object isabellm {
             val pythonCommand: Seq[String] = 
               Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
             val llm_output = pythonCommand.!!
-            iter += 1
 
-            val pattern = "===OUTPUT===\\s*".r
-            val parts = pattern.split(llm_output)
+            val parsed = ujson.read(llm_output)
+            val input = parsed("input").str
+            val output = parsed("output").str
 
-            val inputPart = parts.headOption.map(_.replace("===INPUT===", "").trim).getOrElse("")
-            val outputPart = parts.lift(1).getOrElse("").trim
 
-            //println("Input:")
-            //println(inputPart)
-            println("LLM OUTPUT************************************")
-            println(outputPart)
-
-            inject.injectLemma(outputPart, filePath, lineNum)
-
-          }
-
-          else if (isabelleErrors.contains("Failed to apply initial proof method")) {
-            
-            println("Proof Failed. Making changes...")
-            
-
-            val all_text = extract.extractText(filePath)
-            val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
-
-            if (success) {
+            if (output.nonEmpty) {
               
-              println("Sledgehammer found a solution!")
+              println("LLM OUTPUT************************************")
+              println(output)
 
-            } else {
-              
-              println("Sledgehammer failed to find a solution.")
-              println("Sending to llm for proof...")
-              println(s"LLM Iteration ${iter + 1} of $maxIters")
+              val refined_output = processOutput(output)
 
-              val pythonCommand: Seq[String] = 
-                Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
-              val llm_output = pythonCommand.!!
+              inject.injectLemma(refined_output, filePath, lineNum)
+
               iter += 1
 
-              val pattern = "===OUTPUT===\\s*".r
-              val parts = pattern.split(llm_output)  // limit = 2 to avoid over-splitting
+            } else {
+              println(s"Warning: No output received from LLM. Skipping iteration.")
+            }
+          }
+          // FAILED PROOF ***********************************************************************************
+          else if (isabelleErrors.contains("Failed to apply initial proof method")) {
 
-              val inputPart = parts.headOption.map(_.replace("===INPUT===", "").trim).getOrElse("")
-              val outputPart = parts.lift(1).getOrElse("").trim
+            // NO SUBGOALS! ***********************************************************
+            if (isabelleErrors.contains("No subgoals!")) {
+              println("No subgoals detected! tidying proof...")
+              injectLine(filePath, lineNum, "")
+            } else {
 
-              //println("Input:")
-              //println(inputPart)
-              println("LLM OUTPUT************************************")
-              println(outputPart)
+              println("Proof Failed. Making changes...")
+            
 
-              inject.injectLemma(outputPart, filePath, lineNum)
+              val all_text = extract.extractText(filePath)
+              val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
+
+              if (success) {
+                
+                println("Sledgehammer found a solution!")
+
+              } else {
+                
+                println("Sledgehammer failed to find a solution.")
+                println("Sending to llm for proof...")
+                println(s"LLM Iteration ${iter + 1} of $maxIters")
+
+                val pythonCommand: Seq[String] = 
+                  Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
+                val llm_output = pythonCommand.!!
+                iter += 1
+
+                val parsed = ujson.read(llm_output)
+                val input = parsed("input").str
+                val output = parsed("output").str
+
+                if (output.nonEmpty) {
+                
+                  println("LLM OUTPUT************************************")
+                  println(output)
+
+                  val refined_output = processOutput(output)
+
+                  inject.injectLemma(refined_output, filePath, lineNum)
+
+                  iter += 1
+
+                } else {
+                  println(s"Warning: No output received from LLM. Skipping iteration.")
+                }
+              }
+            }
+          }
+          
+          // INNER LEXICAL ERROR *****************************************************************
+          else if (isabelleErrors.contains("Inner lexical error")) {
+            
+            // UNICODE ERROR *******************************************************************
+            if (containsUnicode(isabelleErrors)) {
+
+              println("Modifying UniCode Symbols...")
+              val all_text = extract.extractText(filePath)
+              val replaced_text = replaceUnicode(all_text)
+              inject.injectAll(filePath, replaced_text)
 
             }
+            
 
           }
-
+          // SYNTAX ERROR ******************************************************************************
           else if (isabelleErrors.contains("Outer syntax error")) {
 
             println("Isabelle encountered an Outer Syntax Error.")
@@ -138,13 +175,18 @@ object isabellm {
 
           }
 
-          // Can be Undefined Method or Fact
+          // BAD CONTEXT ******************************************************************************
+          else if (isabelleErrors.contains("Bad context")) {
+            println("Bad Context. Removing Line...")
+            injectLine(filePath, lineNum, "")
+          }
+
+          // UNDEFINED METHOD/FACT ***********************************************************
           else if (isabelleErrors.contains("Undefined")) {
 
-            println("Undefined Fact/Method.")
-            val undef_word = errorCases.extractUndefined(isabelleErrors).getOrElse((""))
-            val (lineNum, filePath) = extract.extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
-            errorCases.removeWord(filePath, lineNum, undef_word)
+            val undef_word = extractUndefined(isabelleErrors)
+             println(s"Undefined Fact/Method: $undef_word")
+            processUndefined(filePath, lineNum, undef_word)
 
           }
           

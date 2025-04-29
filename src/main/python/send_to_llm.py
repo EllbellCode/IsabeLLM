@@ -6,17 +6,17 @@ import json
 preamble = "I am trying to complete a proof in Isabelle. Here is my theory file so far:"
 lemma_proof = "I am trying to prove the following lemma:"
 request = "Please prove this lemma. " \
-          "Return only the raw code without any additional text, explanations, or formatting. " \
+          "Return only the raw code without any additional text, explanations, formatting, or commentary." \
           "Do not include ``` or language tags. Just the pure code."
 
 fail_return = "Your proof is incorrect. The current proof state is:"
 line_error = "The line: "
 error_message = "produced the following error message:"
 error_request = "Please amend the proof to deal with this error." \
-                "Return only the raw code without any additional text, explanations, or formatting. " \
+                "Return only the raw code without any additional text, explanations, formatting, or commentary."\
                 "Do not include ``` or language tags. Just the pure code."
 
-key = os.getenv("OPENAI_API_KEY")
+key = os.getenv("openai_key")
 
 # Initialize client
 client = OpenAI(
@@ -63,14 +63,14 @@ if __name__ == "__main__":
         
         input = fail_return + "\n" + lemma + "\n" + line_error + "\n" + line + "\n" + error_message + "\n" + error + "\n" + error_request
 
-    print("===INPUT===")
-    print(input)
-
     output, chat_history = query_llm(input, chat_history)
     with open(history_json, "w") as f:
         json.dump(chat_history, f, indent=2)
 
-    print("===OUTPUT===")
-    print(output)
+    print(json.dumps({
+        "input": input,
+        "output": output
+    }))
 
+    
   

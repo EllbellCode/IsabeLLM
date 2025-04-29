@@ -164,9 +164,6 @@ object extract {
         val keywordPattern = keywords.mkString("|")
         val pattern = s"""^\\s*($keywordPattern)\\s+(\\w+).*""".r
 
-        // Use print to debug each line being checked
-        statement.linesIterator.foreach(line => println(s"Checking: '$line'"))
-
         statement.linesIterator.collectFirst {
             case pattern(_, name) => name
         }.getOrElse("default_name")
@@ -187,4 +184,5 @@ object extract {
             source.close()
         }
     }
+
 }

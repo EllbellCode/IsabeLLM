@@ -1,7 +1,10 @@
-[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/extract.scala:174:24: not found: type File[0m
-[0m[[0m[31merror[0m] [0m[0m        val file = new File(filePath)[0m
-[0m[[0m[31merror[0m] [0m[0m                       ^[0m
-[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/extract.scala:180:22: not found: value Source[0m
-[0m[[0m[31merror[0m] [0m[0m        val source = Source.fromFile(file)[0m
-[0m[[0m[31merror[0m] [0m[0m                     ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/undefined.scala:46:70: not found: value oldWord[0m
+[0m[[0m[31merror[0m] [0m[0m            line.replaceAll("""\b""" + java.util.regex.Pattern.quote(oldWord) + """\b\s*;?""", newWord).trim[0m
+[0m[[0m[31merror[0m] [0m[0m                                                                     ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/undefined.scala:51:37: ambiguous reference to overloaded definition,[0m
+[0m[[0m[31merror[0m] [0m[0mboth method println in class PrintWriter of type (x$1: String)Unit[0m
+[0m[[0m[31merror[0m] [0m[0mand  method println in class PrintWriter of type (x$1: Array[Char])Unit[0m
+[0m[[0m[31merror[0m] [0m[0mmatch expected type Nothing => ?[0m
+[0m[[0m[31merror[0m] [0m[0m        updatedLines.foreach(writer.println)[0m
+[0m[[0m[31merror[0m] [0m[0m                                    ^[0m
 [0m[[0m[31merror[0m] [0m[0mtwo errors found[0m

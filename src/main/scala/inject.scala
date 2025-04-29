@@ -23,7 +23,7 @@ object inject {
     "hence ", "thus ", "obtain ", "show ", "ultimately ", "moreover ", "then "
     )
     
-
+    // Injects a new lemma and proof imto a thy file replacing, the existing one*******************
     def injectLemma(newLemma: String, filePath: String, errorLine: Int): Unit = {
 
         val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
@@ -53,6 +53,7 @@ object inject {
         Files.write(Paths.get(filePath), updatedLines.mkString("\n").getBytes(StandardCharsets.UTF_8))
     }
 
+    //injects a new line in place of the given line ******************************************
     def injectLine(filePath: String, lineNumber: Int, newText: String): Unit = {
         // Read all lines from the file
         val lines = Source.fromFile(filePath).getLines().toList
@@ -68,6 +69,15 @@ object inject {
             writer.close()
         } else {
             println(s"Error: Line number $lineNumber is out of bounds.")
+        }
+    }
+
+    def injectAll(filePath: String, newContent: String): Unit = {
+        val writer = new PrintWriter(new File(filePath))
+        try {
+            writer.write(newContent)
+        } finally {
+            writer.close()
         }
     }
 }
