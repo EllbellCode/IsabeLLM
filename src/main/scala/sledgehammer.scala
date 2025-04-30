@@ -20,6 +20,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
 import java.nio.file.{Path, Paths}
+import scala.util.control.Breaks.{break, breakable}
 
 import de.unruh.isabelle.mlvalue.Implicits._
 import de.unruh.isabelle.pure.Implicits._
@@ -30,7 +31,6 @@ object sledgehammer {
     // Expose a public method to run Sledgehammer on a theory text
     def call_sledgehammer (theoryText: String, filePath: String): (Boolean, (String, List[String])) = {
         
-
         val isabelleHome: Path = Paths.get("/home/eaj123/Isabellm/Isabelle2022")
         val setup: Setup = Setup(isabelleHome = isabelleHome)
         val theoryManager: TheoryManager = new TheoryManager(
@@ -48,7 +48,7 @@ object sledgehammer {
         val thy0 = theoryManager.beginTheory(theorySource)
         val init_toplevel = compileFunction0[ToplevelState]("Toplevel.init_toplevel")
         var toplevel = init_toplevel().force.retrieveNow
-
+        
         // Parse and execute transitions
         val parse_text = compileFunction[Theory, String, List[(Transition.T, String)]](
         """fn (thy, text) => let
@@ -65,16 +65,20 @@ object sledgehammer {
         val command_exception = compileFunction[Boolean, Transition.T, ToplevelState, ToplevelState](
             "fn (int, tr, st) => Toplevel.command_exception int tr st"
         )
-
-        for ((transition, text) <- parse_text(thy0, theorySource.text).force.retrieveNow) {
-            toplevel = command_exception(true, transition, toplevel).retrieveNow.force
+        
+        breakable {
+            for ((transition, text) <- parse_text(thy0, theorySource.text).force.retrieveNow) {
+                //println(s"""Transition: "${text.strip}"""")
+                toplevel = command_exception(true, transition, toplevel).retrieveNow.force  
+            }
         }
+
 
         val thy_for_sledgehammer = thy0
         val Sledgehammer: String = thy_for_sledgehammer.importMLStructureNow("Sledgehammer")
         val Sledgehammer_Commands: String = thy_for_sledgehammer.importMLStructureNow("Sledgehammer_Commands")
         val Sledgehammer_Prover: String = thy_for_sledgehammer.importMLStructureNow("Sledgehammer_Prover")
-
+      
         val sledgehammerML: MLFunction4[ToplevelState, Theory, List[String], List[String], (Boolean, (String, List[String]))] =
             compileFunction[ToplevelState, Theory, List[String], List[String], (Boolean, (String, List[String]))](
                 s""" fn (state, thy, adds, dels) =>
@@ -95,7 +99,7 @@ object sledgehammer {
                 |      Timeout.apply (Time.fromSeconds 35) go_run (state, thy) end
                 |""".stripMargin
         )
-
+        
         // Run Sledgehammer
         val result = sledgehammerML(
             toplevel,
@@ -103,7 +107,15 @@ object sledgehammer {
             List[String](), //Added Names
             List[String]()  //Deleted Names
         ).force.retrieveNow
-
         result
+    }
+
+    def extractProof(message: String) = {
+
+        val pattern = """Try this:\s+(.*)\s+\(\d+\s+ms\)""".r
+        message match {
+            case pattern(proof) => proof.trim
+            case _ => ""
+        }
     }
 }

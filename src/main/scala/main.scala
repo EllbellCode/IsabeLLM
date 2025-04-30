@@ -30,6 +30,7 @@ object isabellm {
         (out: String) => stdoutBuffer.append(out + "\n")
       )
 
+      println("Building theory...")
       // Run the command and capture output
       val exitCodeTry = Try {
         Seq("bash", "-c", command).!(logger)
@@ -75,10 +76,11 @@ object isabellm {
             println(s"LLM Iteration ${iter + 1} of $maxIters")
 
             //Call the Python script and pass the file path
+            Seq("bash", "-c", "source /isabellm/bin/activate")
             val pythonCommand: Seq[String] = 
               Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
             val llm_output = pythonCommand.!!
-
+            Seq("bash", "-c", "deactivate")
             val parsed = ujson.read(llm_output)
             val input = parsed("input").str
             val output = parsed("output").str
@@ -88,6 +90,7 @@ object isabellm {
               
               println("LLM OUTPUT************************************")
               println(output)
+              println("**********************************************")
 
               val refined_output = processOutput(output)
 
@@ -150,6 +153,57 @@ object isabellm {
               }
             }
           }
+
+          // FAILED TO FINISH PROOF **************************************************************
+          else if (isabelleErrors.contains("Failed to finish proof")) {
+
+            //injectLine(filePath, lineNum, "")
+            val command = extractCommand(isabelleErrors)
+            println(s"Command: $command")
+            val all_text = extractToKeyword(filePath, lineNum, command)
+            println("Failed to finish proof. Running Sledgehammer...")
+            val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
+
+            if (success) {
+              
+              println("Sledgehammer found a solution!")
+              val proof = extractProof(solution.head)
+              println(proof)
+              injectLine(filePath, lineNum, proof)
+
+            }
+
+            else {
+              println("Sledgehammer failed to find a solution.")
+              extractKeyword(filePath, lineNum, command)
+              injectSorry(filePath, lineNum)
+            }
+          }
+
+          // MALFORMED THEORY**************************************************************
+          else if (isabelleErrors.contains("Malformed theory")) {
+            
+            println("Malformed")
+            val all_text = extractAll(filePath,lineNum)
+            println("Failed to finish proof. Running Sledgehammer...")
+            val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
+
+            if (success) {
+              
+              println("Sledgehammer found a solution!")
+              val proof = extractProof(solution.head)
+
+              println(proof)
+              //injectLine(filePath, lineNum, solution)
+
+            }
+
+            else {
+              println("Sledgehammer failed to find a solution.")
+            }
+          }
+
+
           
           // INNER LEXICAL ERROR *****************************************************************
           else if (isabelleErrors.contains("Inner lexical error")) {
@@ -172,7 +226,6 @@ object isabellm {
             println("Isabelle encountered an Outer Syntax Error.")
             println("Please check the .thy file for syntax issues.")
             done= true
-
           }
 
           // BAD CONTEXT ******************************************************************************

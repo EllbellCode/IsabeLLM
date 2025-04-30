@@ -1,7 +1,9 @@
-[0m[[0m[31merror[0m] [0m[0mde.unruh.isabelle.control.IsabelleMLException: Failed to apply initial proof method (line 36):[0m
-[0m[[0m[31merror[0m] [0m[0mgoal:[0m
-[0m[[0m[31merror[0m] [0m[0mNo subgoals![0m
-[0m[[0m[31merror[0m] [0m[0mAt command "by" (line 36)[0m
+[0m[[0m[31merror[0m] [0m[0mde.unruh.isabelle.control.IsabelleMLException: Failed to apply initial proof method (line 56):[0m
+[0m[[0m[31merror[0m] [0m[0musing this:[0m
+[0m[[0m[31merror[0m] [0m[0mnHeight (nNode x (t # ts)) = Suc (nHeight t)[0m
+[0m[[0m[31merror[0m] [0m[0mgoal (1 subgoal):[0m
+[0m[[0m[31merror[0m] [0m[0m 1. nHeight (nNode x (t # ts)) < nHeight (nNode x (t' # ts))[0m
+[0m[[0m[31merror[0m] [0m[0mAt command "by" (line 56)[0m
 [0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.IsabelleMLException$.unsafeFromId(Isabelle.scala:1078)[0m
 [0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.DefaultExceptionManager.createException(ExceptionManager.scala:43)[0m
 [0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.Isabelle.$anonfun$parseIsabelle$3(Isabelle.scala:294)[0m
@@ -11,7 +13,9 @@
 [0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinPool.scan(ForkJoinPool.java:1656)[0m
 [0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:1594)[0m
 [0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:183)[0m
-[0m[[0m[31merror[0m] [0m[0m(Compile / [31mrun[0m) de.unruh.isabelle.control.IsabelleMLException: Failed to apply initial proof method (line 36):[0m
-[0m[[0m[31merror[0m] [0m[0mgoal:[0m
-[0m[[0m[31merror[0m] [0m[0mNo subgoals![0m
-[0m[[0m[31merror[0m] [0m[0mAt command "by" (line 36)[0m
+[0m[[0m[31merror[0m] [0m[0m(Compile / [31mrun[0m) de.unruh.isabelle.control.IsabelleMLException: Failed to apply initial proof method (line 56):[0m
+[0m[[0m[31merror[0m] [0m[0musing this:[0m
+[0m[[0m[31merror[0m] [0m[0mnHeight (nNode x (t # ts)) = Suc (nHeight t)[0m
+[0m[[0m[31merror[0m] [0m[0mgoal (1 subgoal):[0m
+[0m[[0m[31merror[0m] [0m[0m 1. nHeight (nNode x (t # ts)) < nHeight (nNode x (t' # ts))[0m
+[0m[[0m[31merror[0m] [0m[0mAt command "by" (line 56)[0m
