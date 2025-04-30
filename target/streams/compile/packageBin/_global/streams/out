@@ -30,6 +30,8 @@
 [0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/TheoryManager$Text$.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	history$.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/history$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	timeout.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/timeout.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	TheoryManager$.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/TheoryManager$.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	TheoryManager$Source.class[0m
@@ -40,8 +42,14 @@
 [0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/history.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	inject.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/inject.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	timeout$$anonfun$tacticSearch$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/timeout$$anonfun$tacticSearch$1.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	undefined$$anonfun$checkUndefined$1.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/undefined$$anonfun$checkUndefined$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	timeout$$anonfun$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/timeout$$anonfun$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	timeout$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/timeout$.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	extract$.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  /home/eaj123/Isabellm/Test/target/scala-2.12/classes/extract$.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	TheoryManager$Text.class[0m

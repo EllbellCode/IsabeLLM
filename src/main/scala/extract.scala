@@ -195,6 +195,7 @@ object extract {
         }
     }
 
+    // EXTRACTS A FILE UP TO THE SPECIFIED LINE BUT ONLY EVERYTHING BEFORE THE SPECIFIED KEYWORD *************************
     def extractToKeyword(filePath: String, lineNumber: Int, keyword: String): String = {
         val source = Source.fromFile(filePath)
         val result = new StringBuilder
@@ -240,6 +241,7 @@ object extract {
         result.toString().stripTrailing()
     }
 
+    // REMOVES EVERYTHING INLCUDING AND AFTER A KEYWORD IN A SPECIFIED FILE LINE ****************************************** 
     def extractKeyword(filePath: String, lineNumber: Int, keyword: String): Unit = {
         val lines = Source.fromFile(filePath).getLines().toList
 

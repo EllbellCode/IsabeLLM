@@ -60,12 +60,13 @@ lemma obtainmax:
   assumes "ts \<noteq> []"
   shows "\<exists>t' \<in> set ts. \<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
 proof -
-  have "set (map nHeight ts) \<noteq> {}" using assms by auto
-  then obtain m where m_def: "m = Max (set (map nHeight ts))" by blast
-  then obtain t' where t'_def: "t' \<in> set ts" "nHeight t' = m" 
-    using Max_in[of "set (map nHeight ts)"] by (metis imageE list.set_map)
-  have "\<forall>t'' \<in> set ts. nHeight t'' \<le> m" 
-    using Max_ge[of "set (map nHeight ts)"] m_def by (metis image_eqI list.set_map)
-  thus ?thesis using t'_def by blast
+  have "finite (nHeight ` set ts)" by simp
+  moreover have "nHeight ` set ts \<noteq> {}" using assms by auto
+  then obtain m where "m \<in> nHeight ` set ts" and "\<forall>m' \<in> nHeight ` set ts. m' \<le> m"
+by (meson List.finite_set Max_ge Max_in finite_imageI)
+  then obtain t' where "t' \<in> set ts" and "nHeight t' = m" by auto
+  then have "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
+    using \<open>\<forall>m' \<in> nHeight ` set ts. m' \<le> m\<close> by auto
+  then show ?thesis using \<open>t' \<in> set ts\<close> by blast
 qed
 end 

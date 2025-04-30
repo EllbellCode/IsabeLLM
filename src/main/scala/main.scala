@@ -1,8 +1,14 @@
 import scala.sys.process._
 import scala.util.{Try, Success, Failure}
+import scala.concurrent.{Future, Await, blocking}
+import scala.concurrent.duration._
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.{Executors, TimeUnit}
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.io.PrintWriter
 import java.io.File
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import ujson._
 import extract._
@@ -11,14 +17,22 @@ import history._
 import sledgehammer._
 import llmOutput._
 import undefined._
+import timeout._
 
 object isabellm {
+
+
   def main(args: Array[String]): Unit = {
     
-    val command = "~/Isabellm/Isabelle2022/bin/isabelle build -d /home/eaj123/Isabellm/Test Test"
     val maxIters = 8
+    val timeout = 10
+    val sys_timeout = timeout.seconds
+    val build_command = "~/Isabellm/Isabelle2022/bin/isabelle build -d /home/eaj123/Isabellm/Test Test"
     var iter = 0
     var done = false
+    var filePath: String = ""
+    var name: String = ""
+    var command: String = ""
 
     while (iter < maxIters && !done) {
 
@@ -32,17 +46,24 @@ object isabellm {
 
       println("Building theory...")
       // Run the command and capture output
-      val exitCodeTry = Try {
-        Seq("bash", "-c", command).!(logger)
+      val exitCodeTry = Future {
+        Seq("bash", "-c", build_command).!(logger)
       }
       
-      exitCodeTry match {
+      try {
 
-        case Success(0) =>
+        val exitCode = Await.result(exitCodeTry, sys_timeout)
+        //println(exitCode)
+
+        if (exitCode == 0) {
           println("✅ .thy file built successfully.")
           done = true
+        } else if (exitCode == 142) {
+
+          println("Isabelle Timeout...")
           
-        case Success(1) =>
+        } else if (exitCode == 1) {
+
           println("⚠️ Command completed but returned exit code 1 (generic failure).")
           //println(s"Standard output:\n$stdoutBuffer")
 
@@ -56,13 +77,14 @@ object isabellm {
           println(isabelleErrors)
           println("********************************")
 
-          val (lineNum, filePath) = extract.extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
-          val thy = extract.extractThy(filePath, lineNum)
-          val statement = extract.extractStatement(filePath, lineNum)
-          val line = extract.extractLine(filePath, lineNum)
+          val (lineNum, extractedPath) = extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
+          filePath = extractedPath
+          val thy = extractThy(filePath, lineNum)
+          val statement = extractStatement(filePath, lineNum)
+          val line = extractLine(filePath, lineNum)
 
           // initialise json file for LLM history
-          val name = extract.extractName(statement)
+          name = extractName(statement)
           val json_path = s"history/$name.json"
           val jsonFile = new File(json_path)
           if (!jsonFile.exists()) {
@@ -242,17 +264,53 @@ object isabellm {
             processUndefined(filePath, lineNum, undef_word)
 
           }
+        }   
+      } catch {
+
+        case e: TimeoutException =>
+          println(s"🚨 Timeout exceeded after $sys_timeout.")
+
+          filePath = "/home/eaj123/Isabellm/Test/test.thy"
+          name = "obtainmax"
+          command = "by"
+
+          val (start, end) = findLines(filePath, name)
+          println(start, end)
+          val tactic_line = tacticSearch(filePath, start, end)
+          val all_text = extractToKeyword(filePath, tactic_line, command)
+          println("Hammering timed-out tactics...")
+          val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
+
+
+          //val clean_lemma = removeTactics(lemma_all)
+          //println(clean_lemma)
+          //injectLemma(clean_lemma, filePath, start)
           
-        case Success(otherCode) =>
-          println(s"❌ Command completed but returned unexpected exit code: $otherCode")
-          println(s"Standard output:\n$stdoutBuffer")
-          done = true
+          //val all_text = extractText(filePath)
           
-        case Failure(exception) =>
-          println(s"🚨 Command execution failed with exception: ${exception.getMessage}")
-          println(s"Captured stdout before failure:\n$stdoutBuffer")
-          done = true
-          
+
+          if (success) {
+              
+              println("Sledgehammer found a solution!")
+              val proof = extractProof(solution.head)
+              println(proof)
+
+              if (proof.contains("metis") || proof.contains("blast")) {
+                println("labelling tactic as safe...")
+                val safe_proof = proof + "(*SAFE*)"
+                injectLine(filePath, tactic_line+1, safe_proof)
+              } else {
+
+                injectLine(filePath, tactic_line+1, proof)
+              }
+                            
+
+            }
+
+            else {
+              println("Sledgehammer failed to find a solution.")
+              
+            }
       }
     }
     println(s"Exiting after $iter LLM iteration(s).")
