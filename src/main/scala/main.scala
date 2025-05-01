@@ -35,6 +35,8 @@ object isabellm {
     var command: String = ""
     val jsonPaths = mutable.Map[String, String]()
 
+    Seq("bash", "-c", "deactivate")
+
     while (iter < maxIters && !done) {
 
       // Buffer to capture standard output (stdout)
@@ -126,6 +128,39 @@ object isabellm {
             }
           }
 
+          else if (isabelleErrors.contains("Type unification failed")) {
+
+            println("Sorry detected in lemma, sending to llm for proof.")
+            println(s"LLM Iteration ${iter + 1} of $maxIters")
+
+            //Call the Python script and pass the file path
+            Seq("bash", "-c", "source /isabellm/bin/activate")
+            val pythonCommand: Seq[String] = 
+              Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
+            val llm_output = pythonCommand.!!
+            Seq("bash", "-c", "deactivate")
+            val parsed = ujson.read(llm_output)
+            val input = parsed("input").str
+            val output = parsed("output").str
+
+
+            if (output.nonEmpty) {
+              
+              println("LLM OUTPUT************************************")
+              println(output)
+              println("**********************************************")
+
+              val refined_output = processOutput(output)
+
+              inject.injectLemma(refined_output, filePath, lineNum)
+
+              iter += 1
+
+            } else {
+              println(s"Warning: No output received from LLM. Skipping iteration.")
+            }
+          }
+
           // FAILED PROOF ***********************************************************************************
           else if (isabelleErrors.contains("Failed to apply initial proof method")) {
 
@@ -149,8 +184,7 @@ object isabellm {
             if (!wasModified) {
 
               sledgehammerAll(filePath, lineNum, isabelleErrors)
-              }
-              
+
             } else {
               println("assmsFix modified the file")
             }
@@ -159,24 +193,8 @@ object isabellm {
           // MALFORMED THEORY**************************************************************
           else if (isabelleErrors.contains("Malformed theory")) {
             
-            println("Malformed")
-            val all_text = extractAll(filePath,lineNum)
-            println("Failed to finish proof. Running Sledgehammer...")
-            val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
+            sledgehammerAll(filePath, lineNum, isabelleErrors)
 
-            if (success) {
-              
-              println("Sledgehammer found a solution!")
-              val proof = extractProof(solution.head)
-
-              println(proof)
-              //injectLine(filePath, lineNum, solution)
-
-            }
-
-            else {
-              println("Sledgehammer failed to find a solution.")
-            }
           }
 
           //MALFORMED COMMAND SYNTAX **********************************************************
@@ -228,9 +246,9 @@ object isabellm {
         case e: TimeoutException =>
           println(s"🚨 Timeout exceeded after $sys_timeout.")
 
-          //filePath = "/home/eaj123/Isabellm/Test/test.thy"
-          //name = "obtainmax"
-          //command = "by"
+          filePath = "/home/eaj123/Isabellm/Test/test.thy"
+          name = "obtainmax"
+          command = "by"
 
           val wasModified = assmsFix(filePath, name)
 
@@ -239,7 +257,7 @@ object isabellm {
 
             val (start, end) = findLines(filePath, name)
             println(start, end)
-            val tactic_line = tacticSearch(filePath, start, end)
+            val tactic_line = tacticSearch(filePath, start, end)+1
             println(s"Potential timeout issue found at line $tactic_line")
             val all_text = extractToKeyword(filePath, tactic_line, command)
             println(all_text)
@@ -255,10 +273,12 @@ object isabellm {
                 if (proof.contains("metis") || proof.contains("blast")) {
                   println("labelling tactic as safe...")
                   val safe_proof = proof + "(*SAFE*)"
-                  injectProof(filePath, tactic_line+1, safe_proof)
+                  extractKeyword(filePath, tactic_line, command)
+                  injectProof(filePath, tactic_line, safe_proof)
                 } else {
 
-                  injectProof(filePath, tactic_line+1, proof)
+                  extractKeyword(filePath, tactic_line, command)
+                  injectProof(filePath, tactic_line, proof)
                 }
                               
 
@@ -266,8 +286,8 @@ object isabellm {
 
               else {
                 println("Sledgehammer failed to find a solution.")
-                extractKeyword(filePath, tactic_line+1, command)
-                injectProof(filePath, tactic_line+1, "sorry")
+                extractKeyword(filePath, tactic_line, command)
+                injectProof(filePath, tactic_line, "sorry")
                 
               }
             

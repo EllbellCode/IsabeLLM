@@ -61,19 +61,10 @@ lemma obtainmax:
   shows "\<exists>t' \<in> set ts. \<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
 using assms
 proof -
-  let ?max_height = "Max (nHeight ` set ts)"
-  have "finite (nHeight ` set ts)" by simp
-  moreover from assms have "nHeight ` set ts \<noteq> {}" by auto
-  ultimately have "?max_height \<in> nHeight ` set ts" by (rule Max_in)
-  then obtain t' where "t' \<in> set ts" and "nHeight t' = ?max_height" by auto
-  moreover have "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> ?max_height"
-  proof
-    fix t''
-    assume "t'' \<in> set ts - {t'}"
-    then have "t'' \<in> set ts" and "t'' \<noteq> t'" by auto
-    with `nHeight t' = ?max_height` show "nHeight t'' \<le> ?max_height"
- by simp
-  qed
-ultimately show ?thesis by metis
+  from `ts \<noteq> []` have "nHeight ` set ts \<noteq> {}" by auto
+then obtain m where "m \<in> nHeight ` set ts" and "\<forall>y \<in> nHeight ` set ts. y \<le> m" by (meson List.finite_set Max.coboundedI Max_in finite_imageI)
+  then obtain t' where "t' \<in> set ts" and "nHeight t' = m" by auto
+  then have "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'" using `\<forall>y \<in> nHeight ` set ts. y \<le> m` by auto
+  then show ?thesis using `t' \<in> set ts` by blast
 qed
 end
