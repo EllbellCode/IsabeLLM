@@ -8,6 +8,10 @@ object undefined {
         "Cons"
     )
 
+    val syntax = Set(
+        "using by"
+    )
+
     // Extracts the undefined word/tactic/theory from the error message**********************
     def extractUndefined(errorMsg: String): String = {
         val pattern = """Undefined (?:method|fact):\s*"([^"]+)"""".r
@@ -22,7 +26,7 @@ object undefined {
         val lines = source.getLines().toList
         source.close()
 
-        val pattern = ("""(\s*|;)""" + java.util.regex.Pattern.quote(word) + """(?:\(\d+\))?""").r
+        val pattern = ("""(\s*|;)""" + java.util.regex.Pattern.quote(word) + """(\[[^\]]*\])?""").r
 
         val updatedLines = lines.zipWithIndex.map {
             case (line, idx) if idx == (lineNumber - 1) =>
@@ -55,6 +59,25 @@ object undefined {
         writer.close()
     }
 
+    def removeUsing(filePath: String, lineNumber: Int): Unit = {
+        val expandedPath = filePath.replaceFirst("^~", System.getProperty("user.home"))
+        val source = scala.io.Source.fromFile(expandedPath)
+        val lines = source.getLines().toList
+        source.close()
+
+        val idx = lineNumber - 1
+        val updatedLines = lines.zipWithIndex.map {
+            case (line, i) if i == idx && line.contains("using by") =>
+                // Remove "using" when followed by "by", keeping spacing clean
+                line.replaceFirst("""\busing\b\s*""", "").replaceAll("\\s+", " ").trim
+            case (line, _) => line
+        }
+
+        val writer = new PrintWriter(expandedPath)
+        updatedLines.foreach(writer.println)
+        writer.close()
+    }
+
     // Checks if the undefined word is a derivative of a commom Isabelle method
     // Returns the method if it is ***********************************************************
     def checkUndefined(input: String): String = {
@@ -73,6 +96,9 @@ object undefined {
         } else {
             println("Removing method...")
             removeWord(filePath, lineNumber, word)
+            removeUsing(filePath, lineNumber)
         }
     }
+
+    
 }

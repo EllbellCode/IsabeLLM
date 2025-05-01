@@ -60,7 +60,7 @@ object extract {
     def extractLineAndPath(errorMessage: String): Option[(Int, String)] = {
         val pattern = """line (\d+) of "(.+?\.thy)"""".r
 
-        pattern.findFirstMatchIn(errorMessage).map { m =>
+        val matches = pattern.findAllMatchIn(errorMessage).map { m =>
             val lineNumber = m.group(1).toInt
             val rawPath = m.group(2)
             val fullPath = if (rawPath.startsWith("~")) {
@@ -69,8 +69,10 @@ object extract {
             rawPath
             }
             (lineNumber, fullPath)
-        }
-        }
+        }.toList
+
+        matches.sortBy(_._1).headOption
+    }
 
     def extractIntermediate(filePath: String, errorLine: Int): String = {
         

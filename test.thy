@@ -37,7 +37,7 @@ proof -
   assume h_t_ge: "nHeight t \<ge> foldr max (map nHeight ts) 0"
 
   have "nHeight (nNode x (t#ts)) = Suc (foldr max (map nHeight (t#ts)) 0)"
-    by (simp add: nHeight.simps)
+    by (simp add: nHeight.simps(2))
   also have "... = Suc (max (nHeight t) (foldr max (map nHeight ts) 0))"
     by simp
   also have "... = Suc (nHeight t)"
@@ -45,28 +45,43 @@ proof -
   finally have h_node_t: "nHeight (nNode x (t#ts)) = Suc (nHeight t)" .
 
   have "nHeight (nNode x (t'#ts)) = Suc (foldr max (map nHeight (t'#ts)) 0)"
-    by (simp add: nHeight.simps)
+    by (simp add: nHeight.simps(2))
   also have "... = Suc (max (nHeight t') (foldr max (map nHeight ts) 0))"
     by simp
   also have "... = Suc (nHeight t')"
     using h_t_ge h_t_lt by (simp add: max.absorb1 less_imp_le)
   finally have h_node_t': "nHeight (nNode x (t'#ts)) = Suc (nHeight t')" .
-
+  
   show "nHeight (nNode x (t#ts)) < nHeight (nNode x (t'#ts))"
   using h_node_t h_node_t' h_t_lt by linarith
-qed
+qed 
 
 lemma obtainmax:
   assumes "ts \<noteq> []"
   shows "\<exists>t' \<in> set ts. \<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
-proof -
-  have "finite (nHeight ` set ts)" by simp
-  moreover have "nHeight ` set ts \<noteq> {}" using assms by auto
-  then obtain m where "m \<in> nHeight ` set ts" and "\<forall>m' \<in> nHeight ` set ts. m' \<le> m"
-by (meson List.finite_set Max_ge Max_in finite_imageI)
-  then obtain t' where "t' \<in> set ts" and "nHeight t' = m" by auto
-  then have "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
-    using \<open>\<forall>m' \<in> nHeight ` set ts. m' \<le> m\<close> by auto
-  then show ?thesis using \<open>t' \<in> set ts\<close> by blast
+proof (induct ts)
+  case Nil
+  then show ?case using assms by simp
+next
+  case (Cons t ts)
+  show ?case
+  proof (cases "ts = []")
+    case True
+    then show ?thesis by auto
+  next
+    case False
+    then obtain t' where t'_def: "t' \<in> set ts" and max_t': "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
+      using Cons by auto
+    show ?thesis
+    proof (cases "nHeight t' \<le> nHeight t")
+      case True
+      then show ?thesis
+        by (metis Cons.prems False insert_Diff list.set_intros(1) max_t' set_ConsD subset_insertI)
+    next
+      case False
+      then show ?thesis
+        by (metis insert_iff list.set_intros(1) max_t' set_ConsD)
+    qed
+  qed
 qed
-end 
+end

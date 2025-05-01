@@ -2,15 +2,15 @@ import scala.sys.process._
 import scala.util.{Try, Success, Failure}
 import scala.concurrent.{Future, Await, blocking}
 import scala.concurrent.duration._
+import scala.collection.mutable
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.{Executors, TimeUnit}
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.io.PrintWriter
 import java.io.File
-
+import ujson._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import ujson._
 import extract._
 import inject._
 import history._
@@ -25,7 +25,7 @@ object isabellm {
   def main(args: Array[String]): Unit = {
     
     val maxIters = 8
-    val timeout = 10
+    val timeout = 30
     val sys_timeout = timeout.seconds
     val build_command = "~/Isabellm/Isabelle2022/bin/isabelle build -d /home/eaj123/Isabellm/Test Test"
     var iter = 0
@@ -33,6 +33,7 @@ object isabellm {
     var filePath: String = ""
     var name: String = ""
     var command: String = ""
+    val jsonPaths = mutable.Map[String, String]()
 
     while (iter < maxIters && !done) {
 
@@ -83,13 +84,21 @@ object isabellm {
           val statement = extractStatement(filePath, lineNum)
           val line = extractLine(filePath, lineNum)
 
-          // initialise json file for LLM history
           name = extractName(statement)
-          val json_path = s"history/$name.json"
-          val jsonFile = new File(json_path)
-          if (!jsonFile.exists()) {
-            history.jsonCreate(name)
-          }
+
+          val json_path = jsonPaths.getOrElseUpdate(name, {
+            val freshPath = getUniqueJsonPath("history", name)
+            jsonCreate(new File(freshPath).getName.stripSuffix(".json"))
+            freshPath
+          })
+
+          // initialise json file for LLM history
+          //name = extractName(statement)
+          //val json_path = s"history/$name.json"
+          //val jsonFile = new File(json_path)
+          //if (!jsonFile.exists()) {
+          //  history.jsonCreate(name)
+          //}
           
           // SORRY DETECTED IN PROOF ************************************************************************
           if (isabelleErrors.contains("quick_and_dirty")) {
@@ -124,6 +133,7 @@ object isabellm {
               println(s"Warning: No output received from LLM. Skipping iteration.")
             }
           }
+
           // FAILED PROOF ***********************************************************************************
           else if (isabelleErrors.contains("Failed to apply initial proof method")) {
 
@@ -133,47 +143,31 @@ object isabellm {
               injectLine(filePath, lineNum, "")
             } else {
 
-              println("Proof Failed. Making changes...")
-            
-
-              val all_text = extract.extractText(filePath)
+              //injectLine(filePath, lineNum, "")
+              val command = extractCommand(isabelleErrors)
+              println(s"Command: $command")
+              val all_text = extractToKeyword(filePath, lineNum, command)
+              println("Failed to finish proof. Running Sledgehammer...")
               val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
 
               if (success) {
                 
                 println("Sledgehammer found a solution!")
+                val proof = extractProof(solution.head)
+                println(proof)
+                //println(solution)
+                extractKeyword(filePath,lineNum, command)
+                injectProof(filePath, lineNum, proof)
+                //injectLine(filePath, lineNum, proof)
 
-              } else {
-                
-                println("Sledgehammer failed to find a solution.")
-                println("Sending to llm for proof...")
-                println(s"LLM Iteration ${iter + 1} of $maxIters")
-
-                val pythonCommand: Seq[String] = 
-                  Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
-                val llm_output = pythonCommand.!!
-                iter += 1
-
-                val parsed = ujson.read(llm_output)
-                val input = parsed("input").str
-                val output = parsed("output").str
-
-                if (output.nonEmpty) {
-                
-                  println("LLM OUTPUT************************************")
-                  println(output)
-
-                  val refined_output = processOutput(output)
-
-                  inject.injectLemma(refined_output, filePath, lineNum)
-
-                  iter += 1
-
-                } else {
-                  println(s"Warning: No output received from LLM. Skipping iteration.")
-                }
               }
-            }
+
+              else {
+                println("Sledgehammer failed to find a solution.")
+                extractKeyword(filePath, lineNum, command)
+                injectSorry(filePath, lineNum)
+              }
+              }
           }
 
           // FAILED TO FINISH PROOF **************************************************************
@@ -191,7 +185,10 @@ object isabellm {
               println("Sledgehammer found a solution!")
               val proof = extractProof(solution.head)
               println(proof)
-              injectLine(filePath, lineNum, proof)
+              //println(solution)
+              extractKeyword(filePath,lineNum, command)
+              injectProof(filePath, lineNum, proof)
+              //injectLine(filePath, lineNum, proof)
 
             }
 
@@ -270,9 +267,9 @@ object isabellm {
         case e: TimeoutException =>
           println(s"🚨 Timeout exceeded after $sys_timeout.")
 
-          filePath = "/home/eaj123/Isabellm/Test/test.thy"
-          name = "obtainmax"
-          command = "by"
+          //filePath = "/home/eaj123/Isabellm/Test/test.thy"
+          //name = "obtainmax"
+          //command = "by"
 
           val (start, end) = findLines(filePath, name)
           println(start, end)

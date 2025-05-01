@@ -99,4 +99,23 @@ object inject {
             writer.close()
         }
     }
+
+    def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
+        // Read all lines from the file
+        val lines = Source.fromFile(filePath).getLines().toList
+
+        // Check if the lineNumber is valid
+        if (lineNumber >= 1 && lineNumber <= lines.length) {
+            // Append text to the specific line
+            val updatedLine = lines(lineNumber - 1) + " " + proof
+            val updatedLines = lines.updated(lineNumber - 1, updatedLine)
+
+            // Write the updated content back to the file
+            val writer = new PrintWriter(new File(filePath))
+            updatedLines.foreach(writer.println)
+            writer.close()
+        } else {
+            println(s"Error: Line number $lineNumber is out of bounds.")
+        }
+    }
 }

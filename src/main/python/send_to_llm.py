@@ -16,7 +16,7 @@ error_request = "Please amend the proof to deal with this error." \
                 "Return only the raw code without any additional text, explanations, formatting, or commentary."\
                 "Do not include ``` or language tags. Just the pure code."
 
-key = os.getenv("ai_key")
+key = os.getenv("aikey")
 
 # Initialize client
 client = OpenAI(

@@ -107,6 +107,7 @@ object sledgehammer {
             List[String](), //Added Names
             List[String]()  //Deleted Names
         ).force.retrieveNow
+        isabelle.destroy()
         result
     }
 
