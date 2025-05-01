@@ -1,13 +1,10 @@
-[0m[[0m[31merror[0m] [0m[0mde.unruh.isabelle.control.IsabelleMLException: Outer syntax error: command "theory" expected,[0m
-[0m[[0m[31merror[0m] [0m[0mbut identifier lemma was found[0m
-[0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.IsabelleMLException$.unsafeFromId(Isabelle.scala:1078)[0m
-[0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.DefaultExceptionManager.createException(ExceptionManager.scala:43)[0m
-[0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.Isabelle.$anonfun$parseIsabelle$3(Isabelle.scala:294)[0m
-[0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinTask$RunnableExecuteAction.exec(ForkJoinTask.java:1426)[0m
-[0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:290)[0m
-[0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1020)[0m
-[0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinPool.scan(ForkJoinPool.java:1656)[0m
-[0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:1594)[0m
-[0m[[0m[31merror[0m] [0m[0m	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:183)[0m
-[0m[[0m[31merror[0m] [0m[0m(Compile / [31mrun[0m) de.unruh.isabelle.control.IsabelleMLException: Outer syntax error: command "theory" expected,[0m
-[0m[[0m[31merror[0m] [0m[0mbut identifier lemma was found[0m
+[0m[[0m[31merror[0m] [0m[0mde.unruh.isabelle.control.IsabelleDestroyedException: Isabelle process was destroyed: null[0m
+[0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.IsabelleDestroyedException$.apply(Isabelle.scala:1060)[0m
+[0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.Isabelle.de$unruh$isabelle$control$Isabelle$$parseIsabelle(Isabelle.scala:318)[0m
+[0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.Isabelle$$anon$2.run(Isabelle.scala:486)[0m
+[0m[[0m[31merror[0m] [0m[0mCaused by: java.io.EOFException[0m
+[0m[[0m[31merror[0m] [0m[0m	at java.base/java.io.DataInputStream.readFully(DataInputStream.java:202)[0m
+[0m[[0m[31merror[0m] [0m[0m	at java.base/java.io.DataInputStream.readLong(DataInputStream.java:421)[0m
+[0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.Isabelle.de$unruh$isabelle$control$Isabelle$$parseIsabelle(Isabelle.scala:277)[0m
+[0m[[0m[31merror[0m] [0m[0m	at de.unruh.isabelle.control.Isabelle$$anon$2.run(Isabelle.scala:486)[0m
+[0m[[0m[31merror[0m] [0m[0m(Compile / [31mrun[0m) de.unruh.isabelle.control.IsabelleDestroyedException: Isabelle process was destroyed: null[0m

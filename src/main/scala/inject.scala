@@ -81,25 +81,6 @@ object inject {
         }
     }
 
-    def injectSorry(filePath: String, lineNumber: Int): Unit = {
-        // Read all lines from the file
-        val lines = Source.fromFile(filePath).getLines().toList
-
-        // Modify the specified line (1-based index)
-        val updatedLines = lines.zipWithIndex.map {
-            case (line, idx) if idx + 1 == lineNumber => line + " sorry"
-            case (line, _) => line
-        }
-
-        // Overwrite the file with updated lines
-        val writer = new PrintWriter(filePath)
-        try {
-            updatedLines.foreach(writer.println)
-        } finally {
-            writer.close()
-        }
-    }
-
     def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
         // Read all lines from the file
         val lines = Source.fromFile(filePath).getLines().toList

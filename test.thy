@@ -59,29 +59,21 @@ qed
 lemma obtainmax:
   assumes "ts \<noteq> []"
   shows "\<exists>t' \<in> set ts. \<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
-proof (induct ts)
-  case Nil
-  then show ?case using assms by simp
-next
-  case (Cons t ts)
-  show ?case
-  proof (cases "ts = []")
-    case True
-    then show ?thesis by auto
-  next
-    case False
-    then obtain t' where t'_def: "t' \<in> set ts" and max_t': "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
-      using Cons by auto
-    show ?thesis
-    proof (cases "nHeight t' \<le> nHeight t")
-      case True
-      then show ?thesis
-        by (metis Cons.prems False insert_Diff list.set_intros(1) max_t' set_ConsD subset_insertI)
-    next
-      case False
-      then show ?thesis
-        by (metis insert_iff list.set_intros(1) max_t' set_ConsD)
-    qed
+using assms
+proof -
+  let ?max_height = "Max (nHeight ` set ts)"
+  have "finite (nHeight ` set ts)" by simp
+  moreover from assms have "nHeight ` set ts \<noteq> {}" by auto
+  ultimately have "?max_height \<in> nHeight ` set ts" by (rule Max_in)
+  then obtain t' where "t' \<in> set ts" and "nHeight t' = ?max_height" by auto
+  moreover have "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> ?max_height"
+  proof
+    fix t''
+    assume "t'' \<in> set ts - {t'}"
+    then have "t'' \<in> set ts" and "t'' \<noteq> t'" by auto
+    with `nHeight t' = ?max_height` show "nHeight t'' \<le> ?max_height"
+ by simp
   qed
+ultimately show ?thesis by metis
 qed
 end

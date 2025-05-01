@@ -18,6 +18,11 @@ import de.unruh.isabelle.pure.{Position, Theory, TheoryHeader}
 import scala.concurrent.Future
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.concurrent._
+import scala.concurrent.duration._
+import scala.util.control.NonFatal
+import java.util.concurrent.TimeoutException
+
 
 import java.nio.file.{Path, Paths}
 import scala.util.control.Breaks.{break, breakable}
@@ -25,6 +30,9 @@ import scala.util.control.Breaks.{break, breakable}
 import de.unruh.isabelle.mlvalue.Implicits._
 import de.unruh.isabelle.pure.Implicits._
 import scala.concurrent.ExecutionContext.Implicits.global
+
+import extract._
+import inject._
 
 object sledgehammer {
 
@@ -100,15 +108,45 @@ object sledgehammer {
                 |""".stripMargin
         )
         
-        // Run Sledgehammer
-        val result = sledgehammerML(
-            toplevel,
-            thy0,
-            List[String](), //Added Names
-            List[String]()  //Deleted Names
-        ).force.retrieveNow
-        isabelle.destroy()
-        result
+        val sledgeFuture = Future {
+            sledgehammerML(
+                toplevel,
+                thy0,
+                List[String](), // Added Names
+                List[String]()  // Deleted Names
+            ).force.retrieveNow
+            }
+
+        try {
+            Await.result(sledgeFuture, 30.seconds)
+        } catch {
+            case _: TimeoutException =>
+                (false, ("Timeout", List()))
+        } finally {
+            isabelle.destroy()
+        }   
+
+    }
+
+    def sledgehammerAll(filePath: String, lineNumber: Int, isabelleError: String): Unit = {
+
+        val command = extractCommand(isabelleError)
+        println(s"Command: $command")
+        val all_text = extractToKeyword(filePath, lineNumber, command)
+        println("Failed to finish proof. Running Sledgehammer...")
+        val (success, (message, solution)) = call_sledgehammer(all_text, filePath)
+
+        if (success) {
+            println("Sledgehammer found a solution!")
+            val proof = extractProof(solution.head)
+            println(proof)
+            extractKeyword(filePath, lineNumber, command)
+            injectProof(filePath, lineNumber, proof)
+        } else {
+            println("Sledgehammer failed to find a solution.")
+            extractKeyword(filePath, lineNumber, command)
+            injectProof(filePath, lineNumber, "sorry")
+        }
     }
 
     def extractProof(message: String) = {

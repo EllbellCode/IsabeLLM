@@ -25,7 +25,7 @@ object isabellm {
   def main(args: Array[String]): Unit = {
     
     val maxIters = 8
-    val timeout = 30
+    val timeout = 10
     val sys_timeout = timeout.seconds
     val build_command = "~/Isabellm/Isabelle2022/bin/isabelle build -d /home/eaj123/Isabellm/Test Test"
     var iter = 0
@@ -91,14 +91,6 @@ object isabellm {
             jsonCreate(new File(freshPath).getName.stripSuffix(".json"))
             freshPath
           })
-
-          // initialise json file for LLM history
-          //name = extractName(statement)
-          //val json_path = s"history/$name.json"
-          //val jsonFile = new File(json_path)
-          //if (!jsonFile.exists()) {
-          //  history.jsonCreate(name)
-          //}
           
           // SORRY DETECTED IN PROOF ************************************************************************
           if (isabelleErrors.contains("quick_and_dirty")) {
@@ -143,59 +135,24 @@ object isabellm {
               injectLine(filePath, lineNum, "")
             } else {
 
-              //injectLine(filePath, lineNum, "")
-              val command = extractCommand(isabelleErrors)
-              println(s"Command: $command")
-              val all_text = extractToKeyword(filePath, lineNum, command)
-              println("Failed to finish proof. Running Sledgehammer...")
-              val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
+              sledgehammerAll(filePath, lineNum, isabelleErrors)
 
-              if (success) {
-                
-                println("Sledgehammer found a solution!")
-                val proof = extractProof(solution.head)
-                println(proof)
-                //println(solution)
-                extractKeyword(filePath,lineNum, command)
-                injectProof(filePath, lineNum, proof)
-                //injectLine(filePath, lineNum, proof)
-
-              }
-
-              else {
-                println("Sledgehammer failed to find a solution.")
-                extractKeyword(filePath, lineNum, command)
-                injectSorry(filePath, lineNum)
-              }
               }
           }
 
           // FAILED TO FINISH PROOF **************************************************************
           else if (isabelleErrors.contains("Failed to finish proof")) {
+            
+            val wasModified = assmsFix(filePath, name)
 
-            //injectLine(filePath, lineNum, "")
-            val command = extractCommand(isabelleErrors)
-            println(s"Command: $command")
-            val all_text = extractToKeyword(filePath, lineNum, command)
-            println("Failed to finish proof. Running Sledgehammer...")
-            val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
+            // If assmsFix modified the file, skip the rest of the block
+            if (!wasModified) {
 
-            if (success) {
+              sledgehammerAll(filePath, lineNum, isabelleErrors)
+              }
               
-              println("Sledgehammer found a solution!")
-              val proof = extractProof(solution.head)
-              println(proof)
-              //println(solution)
-              extractKeyword(filePath,lineNum, command)
-              injectProof(filePath, lineNum, proof)
-              //injectLine(filePath, lineNum, proof)
-
-            }
-
-            else {
-              println("Sledgehammer failed to find a solution.")
-              extractKeyword(filePath, lineNum, command)
-              injectSorry(filePath, lineNum)
+            } else {
+              println("assmsFix modified the file")
             }
           }
 
@@ -222,8 +179,12 @@ object isabellm {
             }
           }
 
+          //MALFORMED COMMAND SYNTAX **********************************************************
+          else if (isabelleErrors.contains("Malformed command syntax")) {
 
-          
+            sledgehammerAll(filePath, lineNum, isabelleErrors)
+          }
+ 
           // INNER LEXICAL ERROR *****************************************************************
           else if (isabelleErrors.contains("Inner lexical error")) {
             
@@ -233,7 +194,7 @@ object isabellm {
               println("Modifying UniCode Symbols...")
               val all_text = extract.extractText(filePath)
               val replaced_text = replaceUnicode(all_text)
-              inject.injectAll(filePath, replaced_text)
+              injectAll(filePath, replaced_text)
 
             }
             
@@ -271,43 +232,48 @@ object isabellm {
           //name = "obtainmax"
           //command = "by"
 
-          val (start, end) = findLines(filePath, name)
-          println(start, end)
-          val tactic_line = tacticSearch(filePath, start, end)
-          val all_text = extractToKeyword(filePath, tactic_line, command)
-          println("Hammering timed-out tactics...")
-          val (success, (message, solution)) = sledgehammer.call_sledgehammer(all_text, filePath)
+          val wasModified = assmsFix(filePath, name)
 
+          // If assmsFix modified the file, skip the rest of the block
+          if (!wasModified) {
 
-          //val clean_lemma = removeTactics(lemma_all)
-          //println(clean_lemma)
-          //injectLemma(clean_lemma, filePath, start)
-          
-          //val all_text = extractText(filePath)
-          
+            val (start, end) = findLines(filePath, name)
+            println(start, end)
+            val tactic_line = tacticSearch(filePath, start, end)
+            println(s"Potential timeout issue found at line $tactic_line")
+            val all_text = extractToKeyword(filePath, tactic_line, command)
+            println(all_text)
+            println("Hammering timed-out tactics...")
+            val (success, (message, solution)) = call_sledgehammer(all_text, filePath)
 
-          if (success) {
-              
-              println("Sledgehammer found a solution!")
-              val proof = extractProof(solution.head)
-              println(proof)
+            if (success) {
+                
+                println("Sledgehammer found a solution!")
+                val proof = extractProof(solution.head)
+                println(proof)
 
-              if (proof.contains("metis") || proof.contains("blast")) {
-                println("labelling tactic as safe...")
-                val safe_proof = proof + "(*SAFE*)"
-                injectLine(filePath, tactic_line+1, safe_proof)
-              } else {
+                if (proof.contains("metis") || proof.contains("blast")) {
+                  println("labelling tactic as safe...")
+                  val safe_proof = proof + "(*SAFE*)"
+                  injectProof(filePath, tactic_line+1, safe_proof)
+                } else {
 
-                injectLine(filePath, tactic_line+1, proof)
+                  injectProof(filePath, tactic_line+1, proof)
+                }
+                              
+
               }
-                            
 
-            }
-
-            else {
-              println("Sledgehammer failed to find a solution.")
-              
-            }
+              else {
+                println("Sledgehammer failed to find a solution.")
+                extractKeyword(filePath, tactic_line+1, command)
+                injectProof(filePath, tactic_line+1, "sorry")
+                
+              }
+            
+          } else {
+            println("assmsFix modified the file.")
+          }
       }
     }
     println(s"Exiting after $iter LLM iteration(s).")

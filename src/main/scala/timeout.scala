@@ -1,7 +1,8 @@
 //FUNCTIONALITY FOR DEALING WITH BUILD TIMEOUTS
 
 import scala.io.Source
-
+import java.nio.file.{Files, Paths}
+import java.nio.charset.StandardCharsets
 
 object timeout {
 
@@ -19,6 +20,7 @@ object timeout {
 
     // Returns the Line of the first occurence of the inputted string
     // When looking for a lemma, the first occurence will be the lemma statement! **************************************
+    // Also returns the end line of the proof
     def findLines(filePath: String, lemmaName: String): (Int, Int) = {
         val lines = Source.fromFile(filePath).getLines().toList
 
@@ -75,12 +77,71 @@ object timeout {
         cleanedLines.mkString("\n")
     }
 
+    // Returns the first line where a tactic appears *********************************************
     def tacticSearch(filePath: String, start: Int, end: Int): Int = {
         val lines = Source.fromFile(filePath).getLines().toList
 
-        // Iterate over the specified range and find the first line containing "blast" or "metis"
         (start to end).collectFirst {
             case i if tacticKeywords.exists(kw => lines(i).toLowerCase.contains(kw)) => i
         }.getOrElse(-1) // Return -1 if not found
+    }
+
+    def assmsFix(filePath: String, lemmaName: String): Boolean = {
+        val (startLine, endLine) = findLines(filePath, lemmaName)
+        if (startLine == -1 || endLine == -1) {
+            println(s"Lemma '$lemmaName' not found in $filePath")
+            return false
+        }
+
+        val lines = Source.fromFile(filePath).getLines().toList
+
+        val proofStartIdx = (startLine to endLine).find(i => lines(i).trim.startsWith("proof")).getOrElse(-1)
+        if (proofStartIdx == -1) {
+            println(s"No 'proof' keyword found for lemma '$lemmaName'")
+            return false
+        }
+
+        val beforeLemma  = lines.take(startLine)
+        val lemmaSection = lines.slice(startLine, endLine + 1)
+        val afterLemma   = lines.drop(endLine + 1)
+
+        var changed = false
+
+        val proofLineRelIdx = proofStartIdx - startLine
+
+        // Check if 'using assms' is already directly before proof
+        val alreadyCorrect = 
+            proofLineRelIdx > 0 && lemmaSection(proofLineRelIdx - 1).trim == "using assms"
+
+        // Remove all incorrect uses of 'using assms'
+        val cleanedLemmaSection = lemmaSection.zipWithIndex.map {
+            case (line, relIdx) =>
+                val absIdx = startLine + relIdx
+                val isBeforeProof = relIdx == proofLineRelIdx - 1
+                if (!isBeforeProof && line.contains("using assms")) {
+                    changed = true
+                    line.replace("using assms", "").replaceAll("""\s+by""", " by").trim
+                } else {
+                    line
+                }
+        }
+
+        // Inject 'using assms' before proof only if not already there
+        val finalLemmaSection =
+            if (!alreadyCorrect) {
+                changed = true
+                cleanedLemmaSection.patch(proofLineRelIdx, Seq("using assms", cleanedLemmaSection(proofLineRelIdx)), 1)
+            } else {
+                cleanedLemmaSection
+            }
+
+        if (changed) {
+            val newLines = beforeLemma ++ finalLemmaSection ++ afterLemma
+            Files.write(Paths.get(filePath), newLines.mkString("\n").getBytes(StandardCharsets.UTF_8))
+            println(s"Rewritten 'using assms' in $filePath for lemma '$lemmaName'")
+            return true
+        } else {
+            return false
+        }
     }
 }
