@@ -72,6 +72,7 @@ object inject {
         }
     }
 
+    // Rewrites a whole file with the newContent
     def injectAll(filePath: String, newContent: String): Unit = {
         val writer = new PrintWriter(new File(filePath))
         try {
@@ -81,6 +82,7 @@ object inject {
         }
     }
 
+    // injects a proof at a given line
     def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
         // Read all lines from the file
         val lines = Source.fromFile(filePath).getLines().toList

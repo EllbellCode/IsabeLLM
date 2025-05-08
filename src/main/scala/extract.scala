@@ -74,34 +74,6 @@ object extract {
         matches.sortBy(_._1).headOption
     }
 
-    def extractIntermediate(filePath: String, errorLine: Int): String = {
-        
-        val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
-
-        val start = (errorLine -1 to 0 by -1).find {i =>
-            val trimmed = lines(i).trim
-            intermediateKeywords.exists(kw => trimmed.startsWith(kw))
-        }.getOrElse(0)
-
-        val intermediate = scala.collection.mutable.ArrayBuffer[String]()
-        var reachedProof = false 
-        
-        for (i <- start until lines.length if !reachedProof) {
-            val line = lines(i)
-
-            proofKeywords.find(line.contains) match {
-                case Some(keyword) =>
-                val truncated = line.substring(0, line.indexOf(keyword)).trim
-                if (truncated.nonEmpty) intermediate.append(truncated)
-                reachedProof = true
-                case None =>
-                intermediate.append(line)
-            }    
-        }
-
-        intermediate.mkString("\n")
-    }
-
     // Extracts everything within a Statement
     // Includes the Statement name, the statement itself, and the proof of the statement******************
     def extractAll(filePath: String, errorLine: Int): String = {

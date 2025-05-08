@@ -128,6 +128,7 @@ object sledgehammer {
 
     }
 
+    // applies sledgehammer and injects the proof into the file if successful
     def sledgehammerAll(filePath: String, lineNumber: Int, isabelleError: String): Unit = {
 
         val command = extractCommand(isabelleError)
@@ -149,6 +150,7 @@ object sledgehammer {
         }
     }
 
+    // Extracts the proof from the output of sledgehammer
     def extractProof(message: String) = {
 
         val pattern = """Try this:\s+(.*)\s+\(\d+\s+ms\)""".r

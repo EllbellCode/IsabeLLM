@@ -1,4 +1,5 @@
 // UTILITIES FOR HANDLING THE OUTPUT OF THE LLM API
+
 import java.io.File
 
 object llmOutput {
@@ -55,6 +56,7 @@ object llmOutput {
         }
     }
 
+    // Replaces occurences of "apply" with by to maintain Isar
     def replaceApply(input: String): String = {
         input.replaceAll("\\bapply\\b", "by")
     }

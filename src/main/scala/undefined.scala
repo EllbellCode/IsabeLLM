@@ -61,6 +61,7 @@ object undefined {
         writer.close()
     }
 
+    // removes incorrect use of "Using" keyword
     def removeUsing(filePath: String, lineNumber: Int): Unit = {
         val expandedPath = filePath.replaceFirst("^~", System.getProperty("user.home"))
         val source = scala.io.Source.fromFile(expandedPath)
@@ -89,6 +90,7 @@ object undefined {
         }.getOrElse(input)
     }
 
+    // applies all of the above
     def processUndefined(filePath: String, lineNumber: Int, word: String): Unit = {
 
         if (methods.exists(word.contains)) {

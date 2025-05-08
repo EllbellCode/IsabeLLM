@@ -215,6 +215,11 @@ object isabellm {
               injectAll(filePath, replaced_text)
 
             }
+
+            else {
+
+              //CALL LLM HERE!
+            }
             
 
           }
@@ -258,6 +263,8 @@ object isabellm {
             val (start, end) = findLines(filePath, name)
             println(start, end)
             val tactic_line = tacticSearch(filePath, start, end)+1
+            // modify to see if it has the SAFE tag to prevent checking
+            // already verified lines
             println(s"Potential timeout issue found at line $tactic_line")
             val all_text = extractToKeyword(filePath, tactic_line, command)
             println(all_text)
@@ -270,6 +277,7 @@ object isabellm {
                 val proof = extractProof(solution.head)
                 println(proof)
 
+                // change this to consider all unsafe tactics set
                 if (proof.contains("metis") || proof.contains("blast")) {
                   println("labelling tactic as safe...")
                   val safe_proof = proof + "(*SAFE*)"
@@ -288,6 +296,7 @@ object isabellm {
                 println("Sledgehammer failed to find a solution.")
                 extractKeyword(filePath, tactic_line, command)
                 injectProof(filePath, tactic_line, "sorry")
+                // Custom error for this
                 
               }
             

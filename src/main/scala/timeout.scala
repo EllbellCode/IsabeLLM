@@ -1,4 +1,4 @@
-//FUNCTIONALITY FOR DEALING WITH BUILD TIMEOUTS
+//FUNCTIONALITY FOR DEALING WITH ISABELLE BUILD TIMEOUTS
 
 import scala.io.Source
 import java.nio.file.{Files, Paths}
@@ -50,34 +50,7 @@ object timeout {
         }
     }
 
-    def removeTactics(input: String): String = {
-        val keywords = Seq("using", "by")
-
-        val cleanedLines = input.linesIterator.map { line =>
-            val lowerLine = line.toLowerCase
-            val hasUnsafeTactic =
-                tacticKeywords.exists(kw => lowerLine.contains(kw)) &&
-                !lowerLine.contains("safe")
-
-            if (hasUnsafeTactic) {
-            val keywordIndex = keywords
-                .map(kw => lowerLine.indexOf(kw))
-                .filter(_ != -1)
-                .sorted
-                .headOption
-
-            keywordIndex match {
-                case Some(idx) => line.substring(0, idx).trim
-                case None      => line
-            }
-            } else {
-                line
-            }
-        }
-        cleanedLines.mkString("\n")
-    }
-
-    // Returns the first line where a tactic appears *********************************************
+    // Returns the first line where a potentiial unsafe tactic appears
     def tacticSearch(filePath: String, start: Int, end: Int): Int = {
         val lines = Source.fromFile(filePath).getLines().toList
 
@@ -86,6 +59,7 @@ object timeout {
         }.getOrElse(-1) // Return -1 if not found
     }
 
+    // places "using assms" at the start of the proof to amend incorect use
     def assmsFix(filePath: String, lemmaName: String): Boolean = {
         val (startLine, endLine) = findLines(filePath, lemmaName)
         if (startLine == -1 || endLine == -1) {
