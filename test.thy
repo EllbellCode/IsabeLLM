@@ -57,14 +57,8 @@ proof -
 qed 
 
 lemma obtainmax:
-  assumes "ts \<noteq> []"
+  assumes "ts \<noteq> []" 
   shows "\<exists>t' \<in> set ts. \<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
-using assms
-proof -
-  from `ts \<noteq> []` have "nHeight ` set ts \<noteq> {}" by auto
-then obtain m where "m \<in> nHeight ` set ts" and "\<forall>y \<in> nHeight ` set ts. y \<le> m" by (meson List.finite_set Max.coboundedI Max_in finite_imageI)
-  then obtain t' where "t' \<in> set ts" and "nHeight t' = m" by auto
-  then have "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'" using `\<forall>y \<in> nHeight ` set ts. y \<le> m` by auto
-  then show ?thesis using `t' \<in> set ts` by blast
-qed
+  using assms
+ sorry
 end

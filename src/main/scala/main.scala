@@ -21,10 +21,9 @@ import timeout._
 
 object isabellm {
 
-
   def main(args: Array[String]): Unit = {
     
-    val maxIters = 8
+    val maxIters = 5
     val timeout = 10
     val sys_timeout = timeout.seconds
     val build_command = "~/Isabellm/Isabelle2022/bin/isabelle build -d /home/eaj123/Isabellm/Test Test"
@@ -33,6 +32,8 @@ object isabellm {
     var filePath: String = ""
     var name: String = ""
     var command: String = ""
+    var preservedError: Option[String] = None
+    var preservedLine: Option[String] = None
     val jsonPaths = mutable.Map[String, String]()
 
     Seq("bash", "-c", "deactivate")
@@ -67,7 +68,7 @@ object isabellm {
           
         } else if (exitCode == 1) {
 
-          println("⚠️ Command completed but returned exit code 1 (generic failure).")
+          println("⚠️ Encountered error during build.")
           //println(s"Standard output:\n$stdoutBuffer")
 
           // Extract Isabelle-style error lines
@@ -75,6 +76,8 @@ object isabellm {
             .filter(_.trim.startsWith("***"))
             .map(_.trim.stripPrefix("***").trim)
             .mkString("\n")
+
+
           println("❗ Extracted Isabelle errors:")
           println("********************************")
           println(isabelleErrors)
@@ -97,68 +100,39 @@ object isabellm {
           // SORRY DETECTED IN PROOF ************************************************************************
           if (isabelleErrors.contains("quick_and_dirty")) {
             
-            println("Sorry detected in lemma, sending to llm for proof.")
+            println("Sorry detected in lemma, sending to LLM for proof...")
             println(s"LLM Iteration ${iter + 1} of $maxIters")
 
-            //Call the Python script and pass the file path
-            Seq("bash", "-c", "source /isabellm/bin/activate")
-            val pythonCommand: Seq[String] = 
-              Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
-            val llm_output = pythonCommand.!!
-            Seq("bash", "-c", "deactivate")
-            val parsed = ujson.read(llm_output)
-            val input = parsed("input").str
-            val output = parsed("output").str
-
-
-            if (output.nonEmpty) {
-              
-              println("LLM OUTPUT************************************")
-              println(output)
-              println("**********************************************")
-
-              val refined_output = processOutput(output)
-
-              inject.injectLemma(refined_output, filePath, lineNum)
-
-              iter += 1
-
-            } else {
-              println(s"Warning: No output received from LLM. Skipping iteration.")
+            (preservedError, preservedLine) match {
+              case (Some(prevErr), Some(prevLine)) =>
+                callLLM(thy, statement, prevErr, prevLine, json_path)
+                preservedError = None
+                preservedLine = None
+              case _ =>
+                callLLM(thy, statement, isabelleErrors, line, json_path)
             }
-          }
 
+            iter += 1
+            
+          }
+          // TYPE UNIFICATION FAILED ***********************************************************************
           else if (isabelleErrors.contains("Type unification failed")) {
 
-            println("Sorry detected in lemma, sending to llm for proof.")
+            println("Type Unification in lemma, sending to LLM for correction...")
             println(s"LLM Iteration ${iter + 1} of $maxIters")
 
-            //Call the Python script and pass the file path
-            Seq("bash", "-c", "source /isabellm/bin/activate")
-            val pythonCommand: Seq[String] = 
-              Seq("python3", "src/main/python/send_to_llm.py", thy, statement, isabelleErrors, line, json_path)
-            val llm_output = pythonCommand.!!
-            Seq("bash", "-c", "deactivate")
-            val parsed = ujson.read(llm_output)
-            val input = parsed("input").str
-            val output = parsed("output").str
+            callLLM(thy, statement, isabelleErrors, line, json_path)
+            iter += 1
+          }
 
+          // ILLEGAL APPLICATION IN PROVE MODE ************************************************************
+          else if (isabelleErrors.contains("Illegal application of proof command")) {
 
-            if (output.nonEmpty) {
-              
-              println("LLM OUTPUT************************************")
-              println(output)
-              println("**********************************************")
+            println("Illegal proof command in prove mode. sending to LLM for correction...")
+            println(s"LLM Iteration ${iter + 1} of $maxIters")
 
-              val refined_output = processOutput(output)
-
-              inject.injectLemma(refined_output, filePath, lineNum)
-
-              iter += 1
-
-            } else {
-              println(s"Warning: No output received from LLM. Skipping iteration.")
-            }
+            callLLM(thy, statement, isabelleErrors, line, json_path)
+            iter += 1
           }
 
           // FAILED PROOF ***********************************************************************************
@@ -170,9 +144,15 @@ object isabellm {
               injectLine(filePath, lineNum, "")
             } else {
 
-              sledgehammerAll(filePath, lineNum, isabelleErrors)
-
+              val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
+              
+              if (!hammerProof) {
+                println("Preserving Errors...")
+                preservedError = Some(isabelleErrors)
+                preservedLine = Some(line)
               }
+
+            }
           }
 
           // FAILED TO FINISH PROOF **************************************************************
@@ -180,27 +160,47 @@ object isabellm {
             
             val wasModified = assmsFix(filePath, name)
 
-            // If assmsFix modified the file, skip the rest of the block
             if (!wasModified) {
 
-              sledgehammerAll(filePath, lineNum, isabelleErrors)
+
+              val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
+              
+              if (!hammerProof) {
+                println("Preserving Errors...")
+                preservedError = Some(isabelleErrors)
+                preservedLine = Some(line)
+                //println(preservedError)
+                //println(preservedLine)
+              }
 
             } else {
-              println("assmsFix modified the file")
+              println("assmsFix modified the file. Rebuilding...")
             }
           }
 
           // MALFORMED THEORY**************************************************************
           else if (isabelleErrors.contains("Malformed theory")) {
             
-            sledgehammerAll(filePath, lineNum, isabelleErrors)
+            val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
+              
+            if (!hammerProof) {
+              println("Preserving Errors...")
+              preservedError = Some(isabelleErrors)
+              preservedLine = Some(line)
+            }
 
           }
 
           //MALFORMED COMMAND SYNTAX **********************************************************
           else if (isabelleErrors.contains("Malformed command syntax")) {
 
-            sledgehammerAll(filePath, lineNum, isabelleErrors)
+            val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
+              
+            if (!hammerProof) {
+              println("Preserving Errors...")
+              preservedError = Some(isabelleErrors)
+              preservedLine = Some(line)
+            }
           }
  
           // INNER LEXICAL ERROR *****************************************************************
@@ -251,9 +251,9 @@ object isabellm {
         case e: TimeoutException =>
           println(s"🚨 Timeout exceeded after $sys_timeout.")
 
-          filePath = "/home/eaj123/Isabellm/Test/test.thy"
-          name = "obtainmax"
-          command = "by"
+          //filePath = "/home/eaj123/Isabellm/Test/test.thy"
+          //name = "obtainmax"
+          //command = "by"
 
           val wasModified = assmsFix(filePath, name)
 
@@ -261,13 +261,13 @@ object isabellm {
           if (!wasModified) {
 
             val (start, end) = findLines(filePath, name)
-            println(start, end)
+            //println(start, end)
             val tactic_line = tacticSearch(filePath, start, end)+1
             // modify to see if it has the SAFE tag to prevent checking
             // already verified lines
             println(s"Potential timeout issue found at line $tactic_line")
             val all_text = extractToKeyword(filePath, tactic_line, command)
-            println(all_text)
+            //println(all_text)
             println("Hammering timed-out tactics...")
             val (success, (message, solution)) = call_sledgehammer(all_text, filePath)
 
@@ -278,7 +278,7 @@ object isabellm {
                 println(proof)
 
                 // change this to consider all unsafe tactics set
-                if (proof.contains("metis") || proof.contains("blast")) {
+                if (tacticKeywords.exists(proof.contains)) {
                   println("labelling tactic as safe...")
                   val safe_proof = proof + "(*SAFE*)"
                   extractKeyword(filePath, tactic_line, command)
@@ -288,7 +288,6 @@ object isabellm {
                   extractKeyword(filePath, tactic_line, command)
                   injectProof(filePath, tactic_line, proof)
                 }
-                              
 
               }
 
@@ -296,7 +295,9 @@ object isabellm {
                 println("Sledgehammer failed to find a solution.")
                 extractKeyword(filePath, tactic_line, command)
                 injectProof(filePath, tactic_line, "sorry")
-                // Custom error for this
+                println("Preserving Errors...")
+                preservedError = Some("Failed to Finish Proof.")
+                preservedLine = Some(extractLine(filePath, tactic_line))
                 
               }
             

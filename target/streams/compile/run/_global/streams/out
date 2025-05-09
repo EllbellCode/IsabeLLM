@@ -2,7 +2,8 @@
 [0m[[0m[31merror[0m] [0m[0m	at scala.sys.package$.error(package.scala:30)[0m
 [0m[[0m[31merror[0m] [0m[0m	at scala.sys.process.ProcessBuilderImpl$AbstractBuilder.slurp(ProcessBuilderImpl.scala:138)[0m
 [0m[[0m[31merror[0m] [0m[0m	at scala.sys.process.ProcessBuilderImpl$AbstractBuilder.$bang$bang(ProcessBuilderImpl.scala:108)[0m
-[0m[[0m[31merror[0m] [0m[0m	at isabellm$.main(main.scala:105)[0m
+[0m[[0m[31merror[0m] [0m[0m	at llmOutput$.callLLM(llmOutput.scala:99)[0m
+[0m[[0m[31merror[0m] [0m[0m	at isabellm$.main(main.scala:112)[0m
 [0m[[0m[31merror[0m] [0m[0m	at isabellm.main(main.scala)[0m
 [0m[[0m[31merror[0m] [0m[0m	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)[0m
 [0m[[0m[31merror[0m] [0m[0m	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)[0m

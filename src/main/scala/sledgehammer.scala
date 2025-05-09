@@ -129,10 +129,10 @@ object sledgehammer {
     }
 
     // applies sledgehammer and injects the proof into the file if successful
-    def sledgehammerAll(filePath: String, lineNumber: Int, isabelleError: String): Unit = {
+    def sledgehammerAll(filePath: String, lineNumber: Int, isabelleError: String): Boolean = {
 
         val command = extractCommand(isabelleError)
-        println(s"Command: $command")
+        //println(s"Command: $command")
         val all_text = extractToKeyword(filePath, lineNumber, command)
         println("Failed to finish proof. Running Sledgehammer...")
         val (success, (message, solution)) = call_sledgehammer(all_text, filePath)
@@ -143,10 +143,12 @@ object sledgehammer {
             println(proof)
             extractKeyword(filePath, lineNumber, command)
             injectProof(filePath, lineNumber, proof)
+            true
         } else {
             println("Sledgehammer failed to find a solution.")
             extractKeyword(filePath, lineNumber, command)
             injectProof(filePath, lineNumber, "sorry")
+            false
         }
     }
 

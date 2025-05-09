@@ -1,4 +1,7 @@
-[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/main.scala:152:15: Unmatched closing brace '}' ignored here[0m
-[0m[[0m[31merror[0m] [0m[0m              }[0m
-[0m[[0m[31merror[0m] [0m[0m              ^[0m
-[0m[[0m[31merror[0m] [0m[0mone error found[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/main.scala:283:39: not found: value isabelleErrors[0m
+[0m[[0m[31merror[0m] [0m[0m                preservedError = Some(isabelleErrors)[0m
+[0m[[0m[31merror[0m] [0m[0m                                      ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eaj123/Isabellm/Test/src/main/scala/main.scala:284:38: not found: value line[0m
+[0m[[0m[31merror[0m] [0m[0m                preservedLine = Some(line)[0m
+[0m[[0m[31merror[0m] [0m[0m                                     ^[0m
+[0m[[0m[31merror[0m] [0m[0mtwo errors found[0m

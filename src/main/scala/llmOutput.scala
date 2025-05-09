@@ -1,6 +1,10 @@
 // UTILITIES FOR HANDLING THE OUTPUT OF THE LLM API
 
 import java.io.File
+import scala.sys.process._
+
+import extract._
+
 
 object llmOutput {
 
@@ -44,15 +48,25 @@ object llmOutput {
     }
 
     // Extract the Code between triple backticks if the string contains them
+    // If string is raw code
+    // Returns empty string if there is no code
     def extractCode(input: String): String = {
 
-        val pattern = """(?s)```[a-zA-Z0-9]*\s*(.*?)```""".r
+        val backtickPattern = """(?s)```(?:isabelle)?\s*(.*?)```""".r
+        val statementPattern = """(?s)\b(lemma|theorem|proposition|corollary)\b.*?(?=\n{2,}|$)""".r
 
-        pattern.findFirstMatchIn(input) match {
+        backtickPattern.findFirstMatchIn(input) match {
             case Some(m) =>
-                println("Extracting Isabelle Code...")
+                println("Extracting Isabelle Code from backticks...")
                 m.group(1).trim
-            case None => input
+            case None =>
+                statementPattern.findFirstMatchIn(input) match {
+                    case Some(m2) =>
+                        println("Extracting Isabelle code from plain text...")
+                        m2.matched.trim
+                    case None =>
+                        ""
+                }
         }
     }
 
@@ -69,6 +83,46 @@ object llmOutput {
         val code_step = extractCode(unicode_step)
         val apply_step = replaceApply(code_step)
         apply_step
+
+    }
+
+    // Calls the llm and handles the output
+    def callLLM(thy: String, statement: String, error: String, line: String, jsonPath: String): Unit = {
+
+        val (lineNum, extractedPath) = extractLineAndPath(error).getOrElse((0, "default/path"))
+        val filePath = extractedPath
+
+        //Call the Python script and pass the file path
+        Seq("bash", "-c", "source /isabellm/bin/activate")
+        val pythonCommand: Seq[String] = 
+        Seq("python3", "src/main/python/send_to_llm.py", thy, statement, error, line, jsonPath)
+        val llm_output = pythonCommand.!!
+        Seq("bash", "-c", "deactivate")
+        val parsed = ujson.read(llm_output)
+        val input = parsed("input").str
+        val output = parsed("output").str
+
+
+        if (output.nonEmpty) {
+            
+            println("LLM OUTPUT************************************")
+            println(output)
+            println("**********************************************")
+
+            val refined_output = processOutput(output)
+
+            if (refined_output.nonEmpty) {
+
+            inject.injectLemma(refined_output, filePath, lineNum)
+        
+            } else {
+
+            println("The LLM did not generate code in its response. Skipping iteration...")
+            }
+
+        } else {
+            println(s"Warning: No output received from LLM. Skipping iteration.")
+        }
 
     }
 
