@@ -97,14 +97,14 @@ object sledgehammer {
                 |             val p_state = Toplevel.proof_of state;
                 |             val ctxt = Proof.context_of p_state;
                 |             val params = ${Sledgehammer_Commands}.default_params thy
-                |                [("provers", "e"),("timeout","30"),("verbose","true")];
+                |                [("provers", "e"),("timeout","60"),("verbose","true")];
                 |             val results = ${Sledgehammer}.run_sledgehammer params ${Sledgehammer_Prover}.Normal NONE 1 override p_state;
                 |             val (result, (outcome, step)) = results;
                 |           in
                 |             (result, (${Sledgehammer}.short_string_of_sledgehammer_outcome outcome, [YXML.content_of step]))
                 |           end;
                 |    in
-                |      Timeout.apply (Time.fromSeconds 35) go_run (state, thy) end
+                |      Timeout.apply (Time.fromSeconds 60) go_run (state, thy) end
                 |""".stripMargin
         )
         

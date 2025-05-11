@@ -343,7 +343,7 @@ next
       using height_prop by force
     from `r \<in> nLongest t` t_def obtain r_sub where
       r_sub: "r = x # r_sub" "r_sub \<in> nLongest p"
- sorry
+      using p_in_ts height_less sub_branch_general by auto
     from `r' \<in> nLongest t` t_def obtain r'_sub where
       r'_sub: "r' = x # r'_sub" "r'_sub \<in> nLongest p"
       using p_in_ts height_less sub_branch_general by blast
