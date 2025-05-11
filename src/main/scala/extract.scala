@@ -24,37 +24,6 @@ object extract {
     "hence ", "thus ", "obtain ", "show ", "ultimately ", "moreover ", "then "
     )
     
-    // Extracts A Statement from a .thy file using the Path and Error line *********************************8
-    def extractStatement(filePath: String, errorLine: Int): String = {
-        val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
-
-        // 1. Find the start line (first line with a statement keyword)
-        val start = (errorLine - 1 to 0 by -1).find { i =>
-        val trimmed = lines(i).trim
-        statementKeywords.exists(kw => trimmed.startsWith(kw))
-        }.getOrElse(0)
-
-        // 2. Iterate forwards until we encounter a line with proof-starting keyword
-        val statementLines = scala.collection.mutable.ArrayBuffer[String]()
-        var reachedProof = false
-
-        for (i <- start until lines.length if !reachedProof) {
-            val line = lines(i)
-
-            // If line contains a proof keyword, truncate it
-            proofKeywords.find(line.contains) match {
-                case Some(keyword) =>
-                val truncated = line.substring(0, line.indexOf(keyword)).trim
-                if (truncated.nonEmpty) statementLines.append(truncated)
-                reachedProof = true
-                case None =>
-                statementLines.append(line)
-            }
-        }
-
-        statementLines.mkString("\n")
-    }
-    
     // Extracts the path to the file that produced the error
     // And the line number the error took place *************************************************************
     def extractLineAndPath(errorMessage: String): Option[(Int, String)] = {
