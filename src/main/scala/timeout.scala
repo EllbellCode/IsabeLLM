@@ -3,6 +3,7 @@
 import scala.io.Source
 import java.nio.file.{Files, Paths}
 import java.nio.charset.StandardCharsets
+import java.io.{File, PrintWriter}
 
 object timeout {
 
@@ -79,43 +80,34 @@ object timeout {
         val lemmaSection = lines.slice(startLine, endLine + 1)
         val afterLemma   = lines.drop(endLine + 1)
 
-        var changed = false
-
         val proofLineRelIdx = proofStartIdx - startLine
 
-        // Check if 'using assms' is already directly before proof
-        val alreadyCorrect = 
+        // Detect if assms appears anywhere in the lemma
+        val usesAssmsAnywhere = lemmaSection.exists(_.contains("assms"))
+
+        // Detect if "using assms" is already directly before "proof"
+        val alreadyCorrect =
             proofLineRelIdx > 0 && lemmaSection(proofLineRelIdx - 1).trim == "using assms"
 
-        // Remove all incorrect uses of 'using assms'
-        val cleanedLemmaSection = lemmaSection.zipWithIndex.map {
-            case (line, relIdx) =>
-                val absIdx = startLine + relIdx
-                val isBeforeProof = relIdx == proofLineRelIdx - 1
-                if (!isBeforeProof && line.contains("using assms")) {
-                    changed = true
-                    line.replace("using assms", "").replaceAll("""\s+by""", " by").trim
-                } else {
-                    line
-                }
-        }
+        if (usesAssmsAnywhere && !alreadyCorrect) {
+            // Insert "using assms" right before the proof line
+            val (beforeProof, afterProof) = lemmaSection.splitAt(proofLineRelIdx)
+            val newLemmaSection = beforeProof ++ List("  using assms") ++ afterProof
 
-        // Inject 'using assms' before proof only if not already there
-        val finalLemmaSection =
-            if (!alreadyCorrect) {
-                changed = true
-                cleanedLemmaSection.patch(proofLineRelIdx, Seq("using assms", cleanedLemmaSection(proofLineRelIdx)), 1)
-            } else {
-                cleanedLemmaSection
+            val newFile = beforeLemma ++ newLemmaSection ++ afterLemma
+            val writer = new PrintWriter(new File(filePath))
+            try {
+                newFile.foreach(line => writer.println(line))
+                println(s"Updated lemma '$lemmaName' in $filePath")
+            } finally {
+                writer.close()
             }
 
-        if (changed) {
-            val newLines = beforeLemma ++ finalLemmaSection ++ afterLemma
-            Files.write(Paths.get(filePath), newLines.mkString("\n").getBytes(StandardCharsets.UTF_8))
-            println(s"Rewritten 'using assms' in $filePath for lemma '$lemmaName'")
             return true
-        } else {
-            return false
         }
+
+        println(s"No assms changes needed for lemma '$lemmaName'")
+        false
     }
+    
 }

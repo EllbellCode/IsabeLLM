@@ -12,6 +12,7 @@ object llmOutput {
             '∈' -> "\\<in>",
             '∉' -> "\\<notin>",
             '∧' -> "\\<and>",
+            '⋀' -> "\\<And>",
             '∨' -> "\\<or>",
             '¬' -> "\\<not>",
             '⇒' -> "\\<rightarrow>",
@@ -25,7 +26,13 @@ object llmOutput {
             '←' -> "\\<leftarrow>",
             '×' -> "\\<times>",
             '∅' -> "\\<emptyset>",
-            '⟹' -> "\\<Longrightarrow>"
+            '⟹' -> "\\<Longrightarrow>",
+            '‹' -> "\\<open>",
+            '›' -> "\\<close>",
+            '⟦' -> "\\<lbrakk>",
+            '⟧' -> "\\<rbrakk>",
+            'λ' -> "\\<lambda>"
+
             // Add more mappings as needed
     )
 

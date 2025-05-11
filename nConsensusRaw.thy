@@ -1,4 +1,4 @@
-theory nConsensusRaw
+theory test
  imports Main
 begin
 
@@ -28,20 +28,33 @@ next
   qed 
 qed
 
-proposition height_mono_n: "nHeight t < nHeight t' \<Longrightarrow> nHeight t \<ge> (foldr max (map nHeight ts) 0) \<Longrightarrow>
-                            nHeight (nNode x (t#ts)) < nHeight (nNode x (t'#ts))"
+lemma height_mono_n: 
+  "nHeight t < nHeight t' \<Longrightarrow> 
+   nHeight t \<ge> foldr max (map nHeight ts) 0 \<Longrightarrow>
+   nHeight (nNode x (t#ts)) < nHeight (nNode x (t'#ts))"
 proof -
-  assume "nHeight t < nHeight t'"
-  and "nHeight t \<ge> foldr max (map nHeight ts) 0"
-  then have "nHeight (nNode x (t # ts)) = Suc (max (nHeight t) (foldr max (map nHeight ts) 0))" 
+  assume h_t_lt: "nHeight t < nHeight t'"
+  assume h_t_ge: "nHeight t \<ge> foldr max (map nHeight ts) 0"
+
+  have "nHeight (nNode x (t#ts)) = Suc (foldr max (map nHeight (t#ts)) 0)"
+    by auto
+  also have "... = Suc (max (nHeight t) (foldr max (map nHeight ts) 0))"
     by simp
-  also have "... < Suc (max (nHeight t') (foldr max (map nHeight ts) 0))" 
-    using `nHeight t < nHeight t'` by (simp add: \<open>foldr max (map nHeight ts) 0 \<le> nHeight t\<close>)
-  also have "... = nHeight (nNode x (t' # ts))" 
+  also have "... = Suc (nHeight t)"
+    by (simp add: h_t_ge)
+  finally have h_node_t: "nHeight (nNode x (t#ts)) = Suc (nHeight t)" .
+
+  have "nHeight (nNode x (t'#ts)) = Suc (foldr max (map nHeight (t'#ts)) 0)"
+    by auto
+  also have "... = Suc (max (nHeight t') (foldr max (map nHeight ts) 0))"
     by simp
-  thus "nHeight (nNode x (t # ts)) < nHeight (nNode x (t' # ts))" 
-    by (metis calculation)
-qed
+  also have "... = Suc (nHeight t')"
+    using h_t_ge h_t_lt by auto
+  finally have h_node_t': "nHeight (nNode x (t'#ts)) = Suc (nHeight t')" .
+  
+  show "nHeight (nNode x (t#ts)) < nHeight (nNode x (t'#ts))"
+  using h_node_t h_node_t' h_t_lt by linarith
+qed 
 
 lemma obtainmax:
   assumes "ts \<noteq> []"
@@ -69,7 +82,7 @@ next
     qed
   qed
 qed
-
+ 
 lemma foldr_max_eq:
   assumes "t' \<in> set ts" 
   and "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
@@ -129,12 +142,7 @@ fun nLongest :: "'a nTree \<Rightarrow> 'a list set" where
 lemma height_eq_len:
   assumes "p \<in> nLongest t"
   shows "nHeight t = length p"
-proof -
-  from assms have "p \<in> set (filter (\<lambda>s. length s = nHeight t) (nPaths t))" by simp
-  then have "p \<in> set (nPaths t) \<and> length p = nHeight t" by auto
-  then have "nHeight t = length p" by simp
-  then show ?thesis by simp
-qed
+  using assms unfolding nLongest.simps by auto
 
 lemma branch_height:
   assumes  "p \<in> set (nPaths t)"
@@ -160,7 +168,7 @@ proof (induct t arbitrary: p)
       by auto
 
     have tree_ge_branch:  "nHeight sub_tree \<ge> length sub_branch"
-      using Cons sub_tree_set nNode.hyps branch_in_tree by blast
+ using branch_in_tree local.Cons nNode.hyps sub_tree_set by presburger
 
     moreover have "foldr max (map nHeight (t # ts')) 0 \<ge> nHeight sub_tree"
       by (meson sub_tree_set subtree_height)
@@ -169,104 +177,87 @@ proof (induct t arbitrary: p)
       using local.Cons sub_branch_conc by force
   qed
 qed
-  
+
 lemma sub_longest:
   assumes "t = nNode n (x#xs)"
       and "p \<in> nLongest t"
       and "p = n # p'"
     shows "\<exists>t'' \<in> set (x#xs). p' \<in> nLongest t''"
 proof -
-  from assms(2) have "p \<in> set (filter (\<lambda>s. length s = nHeight t) (nPaths t))"
-    by simp
-  
-  then have path_props: "p \<in> set (nPaths t) \<and> length p = nHeight t" 
-    by simp
-
-  then have "p \<in> set (map (\<lambda>f. n # f) (concat (map nPaths (x#xs))))" 
-    using assms(1) by simp
-    
-  then obtain ps where ps_def: "ps \<in> set (concat (map nPaths (x#xs))) \<and> p' = ps"
-    using assms(3) by auto
-    
-  then obtain t'' where t''_def: "t'' \<in> set (x#xs) \<and> ps \<in> set (nPaths t'')"
+  from assms(2) have p_len: "length p = nHeight t"
+    unfolding nLongest.simps by auto
+  with assms(3) have len_p': "length p' = nHeight t - 1"
     by auto
 
-  have *: "nHeight t = Suc (foldr max (map nHeight (x#xs)) 0)" using assms(1) by simp
-    
-  obtain tmax 
-    where tmax_props: "tmax \<in> set (x#xs)" 
-      and **: "\<forall>t'''\<in>set (x#xs) - {tmax}. nHeight t''' \<le> nHeight tmax"
-    using obtainmax assms(1) by blast
+  from assms(1) have t_height: "nHeight t = Suc (foldr max (map nHeight (x#xs)) 0)"
+    by auto
 
-  hence "foldr max (map nHeight (x#xs)) 0 = nHeight tmax"
-    using foldr_max_eq by blast
-    
-  with path_props have "length p = Suc (nHeight tmax)"
-    using * by simp
-    
-  with assms(3) have ***: "length p' = nHeight tmax"
+  from len_p' t_height have len_p'_eq: "length p' = foldr max (map nHeight (x#xs)) 0"
     by simp
-    
-  have "nHeight t'' \<le> nHeight tmax"
-    using t''_def tmax_props ** by auto
-    
-  moreover have "nHeight t'' \<ge> length ps"
-    by (simp add: t''_def branch_height)
-    
-  ultimately have "nHeight t'' = length p'"
-    using *** ps_def by fastforce
-    
-  thus ?thesis
-    using ps_def t''_def by auto
+
+  from assms(1,2,3) obtain t'' where t''_def: "t'' \<in> set (x#xs)" "p' \<in> set (nPaths t'')"
+    by auto
+
+  have "nHeight t'' = length p'"
+  proof -
+    from t''_def(1) have "foldr max (map nHeight (x#xs)) 0 \<ge> nHeight t''"
+      using subtree_height by fastforce
+    moreover from t''_def(2) have "nHeight t'' \<ge> length p'"
+      using branch_height by fastforce
+    ultimately show ?thesis
+      using len_p'_eq by linarith
+  qed
+
+  with t''_def show ?thesis
+    unfolding nLongest.simps by auto
 qed
 
 lemma sub_branch:
   assumes "t = nNode n (x#xs)"
       and "p \<in> nLongest t"
       and "t' \<in> set (x#xs)"
-      and "(\<forall>t'' \<in> set (x#xs) - {t'}. nHeight t'' < nHeight t')" 
+      and "\<forall>t'' \<in> set (x#xs) - {t'}. nHeight t'' < nHeight t'" 
     obtains p' where "p' \<in> nLongest t'" and "p = n # p'"
 proof -
-  from assms(1) have
-      t_def: "t = nNode n (x#xs)" by assumption
-  from assms(2) have 
-      p_in: "p \<in> set (filter (\<lambda>s. length s = nHeight t) (nPaths t))" by simp
-  from p_in have
-      p_path: "p \<in> set(nPaths t)" and 
-      p_length: "length p = nHeight t" by auto
-  from p_path t_def obtain p' where 
-      p'_def: "p = n # p'" by auto
+  from assms(2)[unfolded nLongest.simps] 
+  have p_def: "p \<in> set (filter (\<lambda>s. length s = nHeight t) (nPaths t))" by simp
 
-  then obtain t'' where 
-      t''_def: "t'' \<in> set (x#xs)" and
-      p'_path: "p' \<in>  nLongest t''" using sub_longest[OF assms(1) assms(2)] by auto
-  from assms(4) and t''_def have 
-      not_tallest: "t'' \<noteq> t' \<Longrightarrow> nHeight t'' < nHeight t'" by auto
-  with t''_def have 
-      max_height: "nHeight t'' \<le> nHeight t'" by fastforce
+  from assms(1) have "nHeight t = Suc (foldr max (map nHeight (x#xs)) 0)"
+    by simp
+  then have "nHeight t = Suc (nHeight t')"
+    using foldr_max_eq2[OF assms(3,4)] by simp 
+  moreover from p_def obtain p' where "p = n # p'" 
+    using assms by auto
+  
+  ultimately have len_p': "length p' = nHeight t'"
+    using assms by auto
 
-  from p_length have "length p' = nHeight t - 1" by (simp add: p'_def)
+  from assms(3-4) have "\<forall>t'' \<in> set (x#xs). nHeight t'' \<le> nHeight t'"
+    using order.strict_implies_order by auto 
 
-  from p'_path have "length p' = nHeight t''" using height_eq_len by auto
+  from `p = n # p'`
+  have "p' \<in> set (concat (map nPaths (x#xs)))"
+    using p_def assms(1) unfolding nPaths.simps by auto 
 
-  with p_length p'_def t_def have 
-      sub_height: "1 + nHeight t'' = nHeight t" by simp
-  from t_def have 
-      sub_height_unfold: "nHeight t = 1 + foldr max (map nHeight (x#xs)) 0" by simp
-  have "nHeight t'' = foldr max (map nHeight (x#xs)) 0" by (metis sub_height sub_height_unfold diff_Suc_1' plus_1_eq_Suc)
+  then obtain t'' where t'_def: "t'' \<in> set (x#xs)" "p' \<in> set (nPaths t'')"
+    by auto 
 
-  with max_height have
-       t''_t'_height: "nHeight t'' = nHeight t'" by (metis assms(3) assms(4) foldr_max_eq2)
-  have t''_t': "t'' = t'" using not_tallest t''_t'_height by auto
+  have "nHeight t'' = length p'"
+  proof -
+    from t'_def(2) have "nHeight t'' \<ge> length p'"
+      using branch_height by fastforce 
+    moreover from `\<forall>t'' \<in> set (x#xs). nHeight t'' \<le> nHeight t'` t'_def(1)
+    have "nHeight t'' \<le> nHeight t'" by auto 
+    ultimately show ?thesis using len_p' by linarith 
+  qed 
 
-  have p'_in: "p' \<in> set(nPaths t')" using t''_t' p'_path by auto
+  with t'_def(2) have "p' \<in> nLongest t''"
+    unfolding nLongest.simps by auto 
 
-  have "length p' = nHeight t'" by (simp add: \<open>length p' = nHeight t''\<close> t''_t')
+  have "t'' = t'" using assms by (metis \<open>nHeight t'' = length p'\<close> insert_Diff_single insert_iff len_p' less_irrefl_nat t'_def(1))
 
-  hence "p' \<in> set (filter (\<lambda>s. length s = nHeight t') (nPaths t'))" using p'_in by auto
-  hence "p' \<in> nLongest t'" by auto
-
-  with p'_def show ?thesis using that by blast
+  with \<open>p' \<in> nLongest t''\<close> \<open>p = n # p'\<close> 
+  show thesis using that by blast 
 qed
 
 fun nCheck :: "nat \<Rightarrow> nat \<Rightarrow> 'a nTree \<Rightarrow> bool" where
@@ -287,56 +278,41 @@ lemma n_check_weaken_distance_Node:
   assumes "nCheck n (Suc d) t"
   shows "nCheck n d t"
   using assms
-proof (induction n arbitrary: t)
+proof (induction n arbitrary: d t)
   case 0
   then show ?case by simp
 next
-  case IH: (Suc nat)
-  show ?case
-  proof (cases t)
-    case (nNode x1 x2)
-    then obtain p where *:"p \<in> set x2" and **:"\<forall>p' \<in> set x2 - {p}. (nHeight p' = 0 \<or> nHeight p - nHeight p' > Suc d)" and ***: "nCheck nat (Suc d) p" using IH nNode nCheck.simps(2)[of nat "Suc d" x1 x2] by blast
-    then have "\<exists>p \<in> set x2. (\<forall>p' \<in> set x2 - {p}. (nHeight p' = 0 \<or> nHeight p - nHeight p' > d)) \<and> nCheck nat d p"
-    proof -
-      have "p \<in> set x2" using * by simp
-      moreover have "\<forall>p' \<in> set x2 - {p}. (nHeight p' = 0 \<or> nHeight p - nHeight p' > d)" using ** by fastforce
-      moreover have "nCheck nat d p" using *** IH by simp
-      ultimately show ?thesis by blast
-    qed
-    then show ?thesis using assms IH nNode
-      by (smt (verit) nCheck.simps(2) not_less_eq not_less_iff_gr_or_eq)
-  qed
+  case (Suc n)
+  then obtain x ts where t_def: "t = nNode x ts" by (cases t) auto
+  from Suc.prems t_def obtain p where 
+    p_in_ts: "p \<in> set ts" and
+    height_prop: "\<forall>p'\<in>set ts - {p}. nHeight p - nHeight p' > Suc d" and
+    check_p: "nCheck n (Suc d) p"
+    by auto
+  from Suc.IH[OF check_p] have "nCheck n d p" .
+  moreover have "\<forall>p'\<in>set ts - {p}. nHeight p - nHeight p' > d"
+ using Suc_lessD height_prop by blast
+  ultimately show ?case 
+    using p_in_ts t_def by auto
 qed
 
 lemma n_check_weaken_depth_Node:
   assumes "nCheck (Suc n) d t"
   shows "nCheck n d t"
   using assms
-proof (induction n arbitrary: t)
+proof (induction n arbitrary: d t)
   case 0
-  then show ?case by simp
+  then show ?case by (cases t) auto
 next
-  case IH: (Suc nat)
-  show ?case
-  proof (cases t)
-    case (nNode x1 x2)
-    show ?thesis
-    proof (cases x2)
-      case Nil
-      then show ?thesis using IH nNode by auto
-    next
- case con: (Cons t ts)
-  then obtain p where *:"p \<in> set x2" and **:"\<forall>p' \<in> set x2 - {p}. (nHeight p' = 0 \<or> nHeight p - nHeight p' > d)" and ***: "nCheck nat d p" using IH nNode nCheck.simps(2)[of "(Suc nat)" "d" x1 x2] by blast
-  then have "\<exists>p \<in> set x2. (\<forall>p' \<in> set x2 - {p}. (nHeight p' = 0 \<or> nHeight p - nHeight p' > d)) \<and> nCheck nat d p"
-      proof -
-        have "p \<in> set x2" using * .
-        moreover have "\<forall>p' \<in> set x2 - {p}. (nHeight p' = 0 \<or> nHeight p - nHeight p' > d)" using ** by fastforce
-        moreover have "nCheck nat d p" using *** IH by simp
-        ultimately show ?thesis by blast
-      qed
-      then show ?thesis using assms IH nNode by auto
-    qed
-  qed
+  case (Suc n)
+  then obtain x ts where t_def: "t = nNode x ts" by (cases t) auto
+  then obtain p where 
+    p_in_ts: "p \<in> set ts" and
+    height_prop: "\<forall>p'\<in>set ts - {p}. nHeight p - nHeight p' > d" and
+    check_p: "nCheck (Suc n) d p"
+    using Suc.prems by auto
+  from Suc.IH[OF check_p] have "nCheck n d p" .
+  with p_in_ts height_prop show ?case using t_def by auto
 qed
 
 lemma n_common_prefix:
@@ -365,7 +341,7 @@ next
     then have r_in_p: "tl r \<in> nLongest p" by auto
     
     from **** obtain p'' where "p'' \<in> nLongest p" and r'_def:  "r' = v # p''" 
-      by (smt (verit, ccfv_SIG) "***" sub_branch list.set_cases p_def t_def) 
+      by (smt (verit, ccfv_SIG) "***" sub_branch list.set_cases p_def t_def)  
 
     then have r'_in_p: "tl r' \<in> nLongest p" by auto
     then have take_tl : "take n (tl r) = take n (tl r')" using Suc check_p r'_in_p r_in_p by blast
@@ -423,7 +399,7 @@ lemma mining_cases:
     obtains (mined) "add  (nNode x ts) = nNode x ys \<and> (\<exists> t' \<in> set ts. set ys = insert (add t') (set ts  - {t'}))"
     using m1 by auto
 
-lemma height_add:"nHeight (add t) = nHeight t \<or> nHeight (add t) = Suc (nHeight t)"
+lemma height_add_m:"nHeight (add t) = nHeight t \<or> nHeight (add t) = Suc (nHeight t)"
 proof (induct t)
   case (nNode x ts)
   show ?case
@@ -461,16 +437,18 @@ proof (induct t)
 qed
 qed
 
-lemma nCheck_add: "nCheck n (Suc d) t \<longrightarrow> 
+lemma nCheck_add_m: "nCheck n (Suc d) t \<longrightarrow> 
                           (nHeight t < nHeight (add t) \<and> nCheck n (Suc (Suc d)) (add t)) \<or> 
                           (nHeight t = nHeight (add t) \<and>  nCheck n (Suc d) (add t)) \<or> 
                           (nHeight t = nHeight (add t) \<and>  nCheck n d (add t))"
   by (metis m1 nTree.exhaust)
  
-   corollary check_add_cases:
-    assumes "nCheck n (Suc d) t"
-    obtains "nCheck n (Suc (Suc d)) (add t)" | "nCheck n (Suc d) (add t)" | "nCheck n d (add t)"
-     using assms nCheck_add by auto
+corollary check_add_cases:
+  assumes "nCheck n (Suc d) t"
+  obtains (case1) "nCheck n (Suc (Suc d)) (add t)"
+        | (case2) "nCheck n (Suc d) (add t)"
+        | (case3) "nCheck n d (add t)"
+  using assms nCheck_add_m by auto
 end
 
 locale honest = mining +
@@ -482,55 +460,41 @@ lemma mining_cases:
   obtains (mined) "add  (nNode x ts) = nNode x ys \<and> (\<exists> t' \<in> set ts. set ys = insert (add t') (set ts  - {t'}) \<and> foldr max (map nHeight ts) 0 = nheight t')"
   using h by auto
 
-lemma height_add: "nHeight (add t) = Suc (nHeight t)"
-proof (induct t)
+lemma height_add_h: "nHeight (add t) = Suc (nHeight t)"
+proof (cases t)
   case (nNode x ts)
-  show ?case
+  then show ?thesis
   proof (cases ts)
     case Nil
+    then obtain e where "add (nNode x []) = nNode x [nNode e []]"
+      using m2 by blast
     then show ?thesis
-    proof -  
-      obtain e where "add (nNode x []) = nNode x [nNode e []]"
-        using m2 by blast
-      hence "nHeight (add (nNode x [])) = Suc (foldr max (map nHeight [nNode e []]) 0)"
-        by simp
-      also have "... = Suc (max (nHeight (nNode e [])) 0)"
-        by simp
-      also have "... = Suc (max 1 0)"
-        by auto
-      also have "... = Suc 1"
-        by simp
-      also have "... = 2"
-        by simp
-      finally have "nHeight (add (nNode x [])) = 2" .
-      moreover have "nHeight (nNode x []) = 1"
-        by auto
-      ultimately show ?thesis
-         by (simp add: local.Nil)
-    qed
+     by (meson in_set_replicate m1)
   next
-    case (Cons t ts')
-    then obtain ys where
-        ys_def: "add (nNode x (t # ts')) = nNode x ys" and
-                "\<exists>t'\<in>set (t # ts'). set ys = insert (add t') (set (t # ts') - {t'}) \<and> foldr max (map nHeight (t # ts')) 0 = nHeight t'"
-       by (meson mining_cases)
-   
-    then obtain t' where 
-        t'_def: "t' \<in> set (t # ts')" and 
-        ys_set: "set ys = insert (add t') (set (t # ts') - {t'})" and
-        max_eq: "foldr max (map nHeight (t # ts')) 0 = nHeight t'"
-        by blast
-      
-    have "foldr max (map nHeight ys) 0 = nHeight (add t')"
-      by (meson h)
-
-    then show ?thesis
-    using m1[of undefined "[]" "[_]"] by fastforce
-    
+    case (Cons t' ts')
+    then obtain ys where ys_def: "add (nNode x ts) = nNode x ys"
+      and "\<exists>t'\<in>set ts. set ys = insert (add t') (set ts - {t'}) \<and> foldr max (map nHeight ts) 0 = nHeight t'"
+      using h by presburger
+    then obtain t'' where t''_def: "t'' \<in> set ts"
+      and ys_set: "set ys = insert (add t'') (set ts - {t''})"
+      and max_eq: "foldr max (map nHeight ts) 0 = nHeight t''"
+      by blast
+    have "nHeight (nNode x ys) = Suc (foldr max (map nHeight ys) 0)"
+     by (smt empty_iff empty_set m1)
+    also have "... = Suc (max (nHeight (add t'')) (foldr max (map nHeight (remove1 t'' ts)) 0))"
+      using ys_set 
+      by (smt emptyE empty_set m1)
+      also have "... = Suc (max (Suc (nHeight t'')) (foldr max (map nHeight (remove1 t'' ts)) 0))"
+      using Cons t''_def max_eq height_add_m[of t''] 
+      by (smt emptyE empty_set m1)
+    also have "... = Suc (Suc (nHeight t''))"
+      by (smt emptyE empty_set m1)
+    finally show ?thesis
+      by (smt emptyE empty_set m1)
   qed
 qed
 
-lemma nCheck_add:
+lemma nCheck_add_h:
   "nCheck n depth t \<longrightarrow> nCheck n (Suc depth) (add t)"
 proof (induct t arbitrary: n depth) 
   case (nNode x ts)
@@ -569,7 +533,7 @@ proof (induct t arbitrary: n depth)
   qed
 qed
 
-end
+end 
 
 locale blockchain =
   honest hadd + mining dadd
@@ -578,6 +542,7 @@ locale blockchain =
     and t0::"'a nTree"
   assumes b1: "nCheck depth (Suc (nHeight t0 - depth)) t0"
       and b2: "nHeight t0 > depth"
+
 begin
 
 inductive_set traces :: "('a event list) set" where
@@ -602,7 +567,7 @@ using assms
 proof (induction rule: traces.induct)
   case (honest_base)
   then show ?case
-   by (simp add: b1 honest.nCheck_add honest_axioms)
+   by (simp add: b1 honest.nCheck_add_h honest_axioms)
 next
   case (dishonest_base)
   then show ?case
@@ -610,7 +575,7 @@ next
 next
   case (honest_induct t)
   then show ?case
-    by (simp add: Suc_diff_le bounded_dishonest_mining honest.nCheck_add honest_axioms)   
+    by (simp add: Suc_diff_le bounded_dishonest_mining honest.nCheck_add_h honest_axioms)   
 next
   case (dishonest_induct t)
   then show ?case
@@ -623,12 +588,7 @@ theorem n_consensus:
   and "p \<in> nLongest (State (hd t))"
   and "p' \<in> nLongest (State (hd t))"
 shows "take depth p = take depth p'"
-proof -
-  have "nCheck depth (Suc (count True t + (nHeight t0 - depth) - count False t)) (State (hd t))"
-    using assms(1) by (rule bounded_check)
-  then show ?thesis
-    using assms(2,3) n_common_prefix by blast
-qed
+  using assms bounded_check[OF assms(1)] n_common_prefix[of depth "Suc (count True t + (nHeight t0 - depth) - count False t)" "State (hd t)"]
+  by (metis (no_types, lifting) height_eq_len le_add_diff_inverse2 nHeight.simps n_common_prefix)
 end
-
 end

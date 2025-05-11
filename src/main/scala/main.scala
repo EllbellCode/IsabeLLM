@@ -23,8 +23,8 @@ object isabellm {
 
   def main(args: Array[String]): Unit = {
     
-    val maxIters = 5
-    val timeout = 10
+    val maxIters = 10
+    val timeout = 30
     val sys_timeout = timeout.seconds
     val build_command = "~/Isabellm/Isabelle2022/bin/isabelle build -d /home/eaj123/Isabellm/Test Test"
     var iter = 0
@@ -39,6 +39,14 @@ object isabellm {
     Seq("bash", "-c", "deactivate")
 
     while (iter < maxIters && !done) {
+
+      if (!filePath.isEmpty) {
+
+        val all_text = extract.extractText(filePath)
+        val replaced_text = replaceUnicode(all_text)
+        injectAll(filePath, replaced_text)
+
+      }
 
       // Buffer to capture standard output (stdout)
       val stdoutBuffer = new StringBuilder
@@ -86,7 +94,7 @@ object isabellm {
           val (lineNum, extractedPath) = extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
           filePath = extractedPath
           val thy = extractThy(filePath, lineNum)
-          val statement = extractStatement(filePath, lineNum)
+          val statement = extractAll(filePath, lineNum)
           val line = extractLine(filePath, lineNum)
 
           name = extractName(statement)
@@ -114,25 +122,6 @@ object isabellm {
 
             iter += 1
             
-          }
-          // TYPE UNIFICATION FAILED ***********************************************************************
-          else if (isabelleErrors.contains("Type unification failed")) {
-
-            println("Type Unification in lemma, sending to LLM for correction...")
-            println(s"LLM Iteration ${iter + 1} of $maxIters")
-
-            callLLM(thy, statement, isabelleErrors, line, json_path)
-            iter += 1
-          }
-
-          // ILLEGAL APPLICATION IN PROVE MODE ************************************************************
-          else if (isabelleErrors.contains("Illegal application of proof command")) {
-
-            println("Illegal proof command in prove mode. sending to LLM for correction...")
-            println(s"LLM Iteration ${iter + 1} of $maxIters")
-
-            callLLM(thy, statement, isabelleErrors, line, json_path)
-            iter += 1
           }
 
           // FAILED PROOF ***********************************************************************************
@@ -178,19 +167,6 @@ object isabellm {
             }
           }
 
-          // MALFORMED THEORY**************************************************************
-          else if (isabelleErrors.contains("Malformed theory")) {
-            
-            val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
-              
-            if (!hammerProof) {
-              println("Preserving Errors...")
-              preservedError = Some(isabelleErrors)
-              preservedLine = Some(line)
-            }
-
-          }
-
           //MALFORMED COMMAND SYNTAX **********************************************************
           else if (isabelleErrors.contains("Malformed command syntax")) {
 
@@ -209,7 +185,6 @@ object isabellm {
             // UNICODE ERROR *******************************************************************
             if (containsUnicode(isabelleErrors)) {
 
-              println("Modifying UniCode Symbols...")
               val all_text = extract.extractText(filePath)
               val replaced_text = replaceUnicode(all_text)
               injectAll(filePath, replaced_text)
@@ -218,7 +193,11 @@ object isabellm {
 
             else {
 
-              //CALL LLM HERE!
+               println("Unbound schematic variable, sending to LLM for correction...")
+              println(s"LLM Iteration ${iter + 1} of $maxIters")
+
+              callLLM(thy, statement, isabelleErrors, line, json_path)
+              iter += 1
             }
             
 
@@ -245,7 +224,23 @@ object isabellm {
             processUndefined(filePath, lineNum, undef_word)
 
           }
-        }   
+
+          else if (isabelleErrors.contains("Bad fact selection")) {
+
+           // LOGIC FOR BAD FACT SELECTION *****************************************************
+
+          // ALL OTHER ERRORS ***************************************************************
+          } else {
+
+            println("Alternative error detected. Sending to LLM for correction...")
+            println(s"LLM Iteration ${iter + 1} of $maxIters")
+
+            callLLM(thy, statement, isabelleErrors, line, json_path)
+            iter += 1
+
+          }   
+        
+        } 
       } catch {
 
         case e: TimeoutException =>
@@ -261,7 +256,7 @@ object isabellm {
           if (!wasModified) {
 
             val (start, end) = findLines(filePath, name)
-            //println(start, end)
+            println(start, end)
             val tactic_line = tacticSearch(filePath, start, end)+1
             // modify to see if it has the SAFE tag to prevent checking
             // already verified lines
@@ -277,7 +272,6 @@ object isabellm {
                 val proof = extractProof(solution.head)
                 println(proof)
 
-                // change this to consider all unsafe tactics set
                 if (tacticKeywords.exists(proof.contains)) {
                   println("labelling tactic as safe...")
                   val safe_proof = proof + "(*SAFE*)"

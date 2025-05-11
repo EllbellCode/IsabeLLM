@@ -118,7 +118,7 @@ object sledgehammer {
             }
 
         try {
-            Await.result(sledgeFuture, 30.seconds)
+            Await.result(sledgeFuture, 60.seconds)
         } catch {
             case _: TimeoutException =>
                 (false, ("Timeout", List()))
