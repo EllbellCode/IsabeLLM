@@ -81,6 +81,17 @@ object undefined {
         writer.close()
     }
 
+    def removeTHM0(input: String): String = {
+        
+        val pattern = """\b\w+\[[^\[\]]*\]""".r
+        
+        pattern.replaceAllIn(input, m => {
+            val word = m.matched.takeWhile(_ != '[')
+            word
+        }
+        )
+    }
+
     // Checks if the undefined word is a derivative of a commom Isabelle method
     // Returns the method if it is ***********************************************************
     def checkUndefined(input: String): String = {
