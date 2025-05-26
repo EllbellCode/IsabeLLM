@@ -97,18 +97,24 @@ object sledgehammer {
                 |             val p_state = Toplevel.proof_of state;
                 |             val ctxt = Proof.context_of p_state;
                 |             val params = ${Sledgehammer_Commands}.default_params thy
-                |                [("provers", "e"),("timeout","60"),("verbose","true")];
+                |                [("provers", "e zipperposition cvc4"),
+                |                   ("timeout","30"),
+                |                   ("verbose","true"), 
+                                    ("slices", "96"),
+                                    ("try0", "true"), 
+                                    ("max_proofs", "1")];
                 |             val results = ${Sledgehammer}.run_sledgehammer params ${Sledgehammer_Prover}.Normal NONE 1 override p_state;
                 |             val (result, (outcome, step)) = results;
                 |           in
                 |             (result, (${Sledgehammer}.short_string_of_sledgehammer_outcome outcome, [YXML.content_of step]))
                 |           end;
                 |    in
-                |      Timeout.apply (Time.fromSeconds 60) go_run (state, thy) end
+                |      Timeout.apply (Time.fromSeconds 90) go_run (state, thy) end
                 |""".stripMargin
         )
         
         val sledgeFuture = Future {
+            println("Running Sledgehammer...")
             sledgehammerML(
                 toplevel,
                 thy0,
@@ -118,7 +124,7 @@ object sledgehammer {
             }
 
         try {
-            Await.result(sledgeFuture, 60.seconds)
+            Await.result(sledgeFuture, 65.seconds)
         } catch {
             case _: TimeoutException =>
                 (false, ("Timeout", List()))
@@ -134,8 +140,10 @@ object sledgehammer {
         val command = extractCommand(isabelleError)
         //println(s"Command: $command")
         val all_text = extractToKeyword(filePath, lineNumber, command)
-        println("Failed to finish proof. Running Sledgehammer...")
+        println("Failed to finish proof. Initialising Sledgehammer...")
         val (success, (message, solution)) = call_sledgehammer(all_text, filePath)
+        //println(message)
+        println(solution)
 
         if (success) {
             println("Sledgehammer found a solution!")
@@ -155,7 +163,7 @@ object sledgehammer {
     // Extracts the proof from the output of sledgehammer
     def extractProof(message: String) = {
 
-        val pattern = """Try this:\s+(.*)\s+\(\d+\s+ms\)""".r
+        val pattern = """Try this:\s+(.*?)\s+\(.*\)""".r
         message match {
             case pattern(proof) => proof.trim
             case _ => ""

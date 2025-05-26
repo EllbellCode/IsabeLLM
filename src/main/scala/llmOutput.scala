@@ -99,36 +99,43 @@ object llmOutput {
         val (lineNum, extractedPath) = extractLineAndPath(error).getOrElse((0, "default/path"))
         val filePath = extractedPath
 
-        //Call the Python script and pass the file path
-        Seq("bash", "-c", "source /isabellm/bin/activate")
-        val pythonCommand: Seq[String] = 
-        Seq("python3", "src/main/python/send_to_llm.py", thy, statement, error, line, jsonPath)
-        val llm_output = pythonCommand.!!
-        Seq("bash", "-c", "deactivate")
-        val parsed = ujson.read(llm_output)
-        val input = parsed("input").str
-        val output = parsed("output").str
+        var success = false
 
-
-        if (output.nonEmpty) {
+        while (!success) {
             
-            println("LLM OUTPUT************************************")
-            println(output)
-            println("**********************************************")
-
-            val refined_output = processOutput(output)
-
-            if (refined_output.nonEmpty) {
-
-            inject.injectLemma(refined_output, filePath, lineNum)
-        
-            } else {
-
-            println("The LLM did not generate code in its response. Skipping iteration...")
+            println("Querying the LLM...")
+    
+            try {
+                val pythonCommand: Seq[String] =
+                    Seq("python3", "src/main/python/send_to_llm.py", thy, statement, error, line, jsonPath)
+    
+                val llm_output = pythonCommand.!!
+                val parsed = ujson.read(llm_output)
+                val input = parsed("input").str
+                val output = parsed("output").str
+    
+                if (output.nonEmpty) {
+                    println("LLM OUTPUT************************************")
+                    println(output)
+                    println("**********************************************")
+    
+                    val refined_output = processOutput(output)
+    
+                    if (refined_output.nonEmpty) {
+                        inject.injectLemma(refined_output, filePath, lineNum)
+                        success = true // exit loop
+                    } else {
+                        println("The LLM did not generate code in its response. Retrying...")
+                    }
+    
+                } else {
+                    println("Warning: No output received from LLM. Retrying...")
+                }
+    
+            } catch {
+                case e: Exception =>
+                    println(s"Error during LLM call: ${e.getMessage}. Retrying...")
             }
-
-        } else {
-            println(s"Warning: No output received from LLM. Skipping iteration.")
         }
 
     }

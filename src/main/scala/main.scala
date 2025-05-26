@@ -91,7 +91,7 @@ object isabellm {
           println(isabelleErrors)
           println("********************************")
 
-          val (lineNum, extractedPath) = extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
+          var (lineNum, extractedPath) = extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
           filePath = extractedPath
           val thy = extractThy(filePath, lineNum)
           val statement = extractAll(filePath, lineNum)
@@ -132,6 +132,12 @@ object isabellm {
               println("No subgoals detected! tidying proof...")
               injectLine(filePath, lineNum, "")
             } else {
+
+              val fixLocale = localeFix(filePath, name)
+
+              if (fixLocale) {
+                lineNum += 1
+              }
 
               val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
               
@@ -256,9 +262,10 @@ object isabellm {
           println(s"🚨 Timeout exceeded after $sys_timeout.")
 
           //filePath = "/home/eaj123/Isabellm/Test/test.thy"
-          //name = "obtainmax"
+          //name = "n_consensus"
           //command = "by"
 
+          //DOES NOT WORK IF IT IS THE FIRST CALL
           val wasModified = assmsFix(filePath, name)
 
           // If assmsFix modified the file, skip the rest of the block

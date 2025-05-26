@@ -16,7 +16,7 @@ object timeout {
     )
 
     val tacticKeywords = Set(
-        "blast", "metis"
+        "blast", "metis", "auto"
     )
 
     // Returns the Line of the first occurence of the inputted string
@@ -54,13 +54,16 @@ object timeout {
     // Returns the first line where a potentiial unsafe tactic appears
     def tacticSearch(filePath: String, start: Int, end: Int): Int = {
         val lines = Source.fromFile(filePath).getLines().toList
-
+      
         (start to end).collectFirst {
-            case i if tacticKeywords.exists(kw => lines(i).toLowerCase.contains(kw)) => i
+          case i if tacticKeywords.exists(kw =>
+            lines(i).toLowerCase.contains(kw) &&
+            !lines(i).contains("(*SAFE*)")
+          ) => i
         }.getOrElse(-1) // Return -1 if not found
     }
 
-    // places "using assms" at the start of the proof to amend incorect use
+    // places "using assms" at the start of the proof to amend incorrect use
     def assmsFix(filePath: String, lemmaName: String): Boolean = {
         val (startLine, endLine) = findLines(filePath, lemmaName)
         if (startLine == -1 || endLine == -1) {
@@ -108,6 +111,98 @@ object timeout {
 
         println(s"No assms changes needed for lemma '$lemmaName'")
         false
+    }
+
+    def localeFix(filePath: String, lemmaName: String): Boolean = {
+        val lines = Source.fromFile(filePath).getLines().toList
+    
+        case class Locale(name: String, start: Int, end: Int, assumptions: List[String])
+    
+        val localeStartPattern = raw"""locale\s+(\w+)\s*=\s*.*""".r
+        val assumesPattern = raw"""assumes\s+(.*)""".r
+    
+        var locales = List[Locale]()
+        var i = 0
+    
+        while (i < lines.length) {
+            lines(i) match {
+                case localeStartPattern(name) =>
+                    val start = i
+                    var assumptions = List[String]()
+                    var foundBegin = false
+                    i += 1
+                    while (i < lines.length && !foundBegin) {
+                        val line = lines(i).trim
+                        line match {
+                            case assumesPattern(assms) =>
+                                val names = assms.split("""\s+and\s+""").map(_.takeWhile(_ != ':').trim)
+                                assumptions ++= names
+                            case l if l == "begin" => foundBegin = true
+                            case _ =>
+                        }
+                        i += 1
+                    }
+                    val bodyStart = i
+                    var depth = 1
+                    while (i < lines.length && depth > 0) {
+                        if (lines(i).trim == "end") depth -= 1
+                        else if (lines(i).contains("locale ")) depth += 1
+                        i += 1
+                    }
+                    locales ::= Locale(name, start, i - 1, assumptions)
+                case _ => i += 1
+            }
+        }
+    
+        // Find lemma location
+        val (startLine, endLine) = findLines(filePath, lemmaName)
+        if (startLine == -1 || endLine == -1) {
+            println(s"Lemma '$lemmaName' not found in $filePath")
+            return false
+        }
+    
+        val lemmaLocaleOpt = locales.find(l => startLine >= l.start && endLine <= l.end)
+        if (lemmaLocaleOpt.isEmpty) {
+            println(s"Lemma '$lemmaName' not inside a locale.")
+            return false
+        }
+    
+        val locale = lemmaLocaleOpt.get
+        if (locale.assumptions.isEmpty) {
+            println(s"No assumptions found in locale '${locale.name}' for lemma '$lemmaName'")
+            return false
+        }
+    
+        val proofStartIdx = (startLine to endLine).find(i => lines(i).trim.startsWith("proof")).getOrElse(-1)
+        if (proofStartIdx == -1) {
+            println(s"No 'proof' keyword found for lemma '$lemmaName'")
+            return false
+        }
+    
+        val lemmaSection = lines.slice(startLine, endLine + 1)
+        val proofLineRelIdx = proofStartIdx - startLine
+    
+        val alreadyUsing = proofLineRelIdx > 0 && lemmaSection(proofLineRelIdx - 1).trim.startsWith("using")
+    
+        if (!alreadyUsing) {
+            val usingLine = "  using " + locale.assumptions.mkString(" ")
+            val (beforeProof, afterProof) = lemmaSection.splitAt(proofLineRelIdx)
+            val newLemmaSection = beforeProof ++ List(usingLine) ++ afterProof
+    
+            val newFile = lines.take(startLine) ++ newLemmaSection ++ lines.drop(endLine + 1)
+            val writer = new PrintWriter(new File(filePath))
+            try {
+                newFile.foreach(writer.println)
+                println(s"Updated lemma '$lemmaName' with locale assumptions from '${locale.name}'")
+            } finally {
+                writer.close()
+            }
+    
+            return true
+        } else {
+            println(s"Lemma '$lemmaName' already has a 'using' statement before 'proof'")
+            return false
+        }
     }
     
 }
