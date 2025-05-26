@@ -163,7 +163,7 @@ object sledgehammer {
     // Extracts the proof from the output of sledgehammer
     def extractProof(message: String) = {
 
-        val pattern = """Try this:\s+(.*?)\s+\(.*\)""".r
+         val pattern = """Try this:\s+(.+?)\s+\(\d+(?:\.\d+)?\s+\w+\)$""".r
         message match {
             case pattern(proof) => proof.trim
             case _ => ""

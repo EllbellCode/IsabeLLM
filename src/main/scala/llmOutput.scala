@@ -60,7 +60,7 @@ object llmOutput {
     def extractCode(input: String): String = {
 
         val backtickPattern = """(?s)```(?:isabelle)?\s*(.*?)```""".r
-        val statementPattern = """(?s)\b(lemma|theorem|proposition|corollary)\b.*?(?=\n{2,}|$)""".r
+        val statementPattern = """(?s)\b(lemma|theorem|proposition|corollary)\b.*?(?=\n\s*\n\s*(lemma|theorem|proposition|corollary|proof|qed|\z))""".r
 
         backtickPattern.findFirstMatchIn(input) match {
             case Some(m) =>

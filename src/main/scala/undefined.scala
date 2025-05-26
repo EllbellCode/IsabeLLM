@@ -14,6 +14,10 @@ object undefined {
         "using by"
     )
 
+    val suffix = Set(
+        "IH"
+    )
+
     // Extracts the undefined word/tactic/theory from the error message**********************
     def extractUndefined(errorMsg: String): String = {
         val pattern = """Undefined (?:method|fact):\s*"([^"]+)"""".r
@@ -101,6 +105,16 @@ object undefined {
         }.getOrElse(input)
     }
 
+    def removeSuffix(input: String): String = {
+        
+        val pattern = raw"""(.*?)\.(${suffix.mkString("|")})\b""".r
+
+        input match {
+            case pattern(prefix, _) => prefix
+            case _ => input
+        }
+    }
+
     // applies all of the above
     def processUndefined(filePath: String, lineNumber: Int, word: String): Unit = {
 
@@ -108,6 +122,12 @@ object undefined {
             println("Modifying method...")
             val newWord = checkUndefined(word)
             replaceWord(filePath, lineNumber, word, newWord)
+        } else if (suffix.exists(s => word.endsWith("." + s))) {
+
+            println("Removing suffix...")
+            val newWord = removeSuffix(word)
+            replaceWord(filePath, lineNumber, word, newWord)
+
         } else {
             println("Removing method...")
             removeWord(filePath, lineNumber, word)
