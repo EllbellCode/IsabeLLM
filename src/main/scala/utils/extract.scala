@@ -1,3 +1,6 @@
+
+package utils
+
 import java.io.File
 import scala.io.Source
 import java.io.PrintWriter
@@ -42,6 +45,63 @@ object extract {
 
         matches.sortBy(_._1).headOption
     }
+
+    // Extracts A Statement from a .thy file using the Path and Error line *********************************8
+    def extractStatement(filePath: String, errorLine: Int): String = {
+        val statementKeywords = Set(
+            "lemma ", "theorem ", "proposition ", "corollary "
+        )
+
+        val proofKeywords = List(
+            "unfolding", "using", "proof", "by", "apply", "sorry"
+        )
+
+        val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
+
+        // 1. Find the start of the statement
+        val start = (errorLine - 1 to 0 by -1).find { i =>
+            val trimmed = lines(i).trim
+            statementKeywords.exists(kw => trimmed.startsWith(kw))
+        }.getOrElse(0)
+
+        // 2. Collect lines until a proof keyword is found
+        val statementLines = scala.collection.mutable.ArrayBuffer[String]()
+        var reachedProof = false
+
+        def findFirstKeywordOutsideQuotes(line: String): Option[(String, Int)] = {
+            var inQuotes = false
+            var i = 0
+            while (i < line.length) {
+            if (line.charAt(i) == '"') inQuotes = !inQuotes
+            else if (!inQuotes) {
+                for (kw <- proofKeywords) {
+                if (line.startsWith(kw, i) && (i == 0 || line.charAt(i - 1).isWhitespace)) {
+                    return Some((kw, i))
+                }
+                }
+            }
+            i += 1
+            }
+            None
+        }
+
+        for (i <- start until lines.length if !reachedProof) {
+            val line = lines(i).trim
+            findFirstKeywordOutsideQuotes(line) match {
+            case Some((kw, 0)) if line == kw => // whole line is just a proof keyword like "sorry"
+                reachedProof = true
+            case Some((kw, idx)) =>
+                val truncated = lines(i).substring(0, idx).trim
+                if (truncated.nonEmpty) statementLines.append(truncated)
+                reachedProof = true
+            case None =>
+                statementLines.append(lines(i))
+            }
+        }
+
+        statementLines.mkString("\n")
+    }
+
 
     // Extracts everything within a Statement
     // Includes the Statement name, the statement itself, and the proof of the statement******************

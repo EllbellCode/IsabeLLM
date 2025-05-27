@@ -1,3 +1,6 @@
+
+package llm
+
 // Functionality for handling the conversation history with the LLM
 
 import java.io.{File, PrintWriter}

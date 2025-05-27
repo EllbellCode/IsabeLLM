@@ -3,7 +3,12 @@ import sys
 from openai import OpenAI
 import json
 
-system_setup = {"role": "system", "content": "You are a theorem proving expert in Isabelle. Prove only the theorems that are given to you. You may use any other proven statement within the .thy file or its imports."}
+system_setup = {"role": "system", "content": 
+                """
+                You are a theorem proving expert in Isabelle. 
+                Prove only the theorems that are given to you. 
+                You may use any other proven statement within the .thy file or its imports.
+                """}
 
 preamble = "I am trying to complete a proof in Isabelle. Here is my theory file so far:"
 lemma_proof = "I am trying to prove the following lemma:"
@@ -51,7 +56,7 @@ if __name__ == "__main__":
 
     # Get arguments from command line
     thy = sys.argv[1]
-    lemma = sys.argv[2]
+    lemma_all = sys.argv[2]
     error = sys.argv[3]
     line = sys.argv[4]
     history_json = sys.argv[5]
@@ -64,12 +69,12 @@ if __name__ == "__main__":
     if len(chat_history) == 0:
 
         #chat_history.append({"role": "system", "content": "You are a theorem proving expert in Isabelle. Prove only the theorems that are given to you. You may use any other proven statement within the .thy file or its imports."})
-        input = preamble + "\n" + thy + "\n" + lemma_proof + "\n" + lemma + "\n" + request 
+        input = preamble + "\n" + thy + "\n" + lemma_proof + "\n" + lemma_all + "\n" + request 
     
     # Returning failed proof
     else:
         
-        input = fail_return + "\n" + lemma + "\n" + line_error + "\n" + line + "\n" + error_message + "\n" + error + "\n" + error_request
+        input = fail_return + "\n" + lemma_all + "\n" + line_error + "\n" + line + "\n" + error_message + "\n" + error + "\n" + error_request
 
     chat_history_ = [system_setup] + chat_history
     output, chat_history = query_llm(input, chat_history_)

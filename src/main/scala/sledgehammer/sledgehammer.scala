@@ -1,3 +1,6 @@
+
+package sledgehammer
+
 // This file is heavily inspired by the work done on Portal to ISAbelle (PISA)
 // for more information on PISA, go to https://github.com/albertqjiang/Portal-to-ISAbelle
 // For this file in particular, go to
@@ -31,8 +34,8 @@ import de.unruh.isabelle.mlvalue.Implicits._
 import de.unruh.isabelle.pure.Implicits._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import extract._
-import inject._
+import utils.extract._
+import utils.inject._
 
 object sledgehammer {
 

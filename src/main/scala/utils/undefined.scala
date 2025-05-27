@@ -1,3 +1,6 @@
+
+package utils
+
 import java.io.PrintWriter
 import scala.io.Source
 import java.nio.file.{Files, Paths}

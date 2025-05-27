@@ -11,13 +11,13 @@ import java.io.File
 import ujson._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import extract._
-import inject._
-import history._
-import sledgehammer._
-import llmOutput._
-import undefined._
-import timeout._
+import utils.extract._
+import utils.inject._
+import utils.undefined._
+import utils.timeout._
+import llm.history._
+import llm.llmOutput._
+import sledgehammer.sledgehammer._
 
 object isabellm {
 
@@ -42,7 +42,7 @@ object isabellm {
 
       if (!filePath.isEmpty) {
 
-        val all_text = extract.extractText(filePath)
+        val all_text = extractText(filePath)
         val replaced_text = replaceUnicode(all_text)
         injectAll(filePath, replaced_text)
 
@@ -94,10 +94,12 @@ object isabellm {
           var (lineNum, extractedPath) = extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
           filePath = extractedPath
           val thy = extractThy(filePath, lineNum)
-          val statement = extractAll(filePath, lineNum)
+          val all_statement = extractAll(filePath, lineNum)
+          val statement = extractStatement(filePath, lineNum)
+          //println(statement)
           val line = extractLine(filePath, lineNum)
 
-          name = extractName(statement)
+          name = extractName(all_statement)
 
           val json_path = jsonPaths.getOrElseUpdate(name, {
             val freshPath = getUniqueJsonPath("history", name)
@@ -113,11 +115,11 @@ object isabellm {
 
             (preservedError, preservedLine) match {
               case (Some(prevErr), Some(prevLine)) =>
-                callLLM(thy, statement, prevErr, prevLine, json_path)
+                callLLM(thy, all_statement, statement, prevErr, prevLine, json_path)
                 preservedError = None
                 preservedLine = None
               case _ =>
-                callLLM(thy, statement, isabelleErrors, line, json_path)
+                callLLM(thy, all_statement, statement, isabelleErrors, line, json_path)
             }
 
             iter += 1
@@ -191,7 +193,7 @@ object isabellm {
             // UNICODE ERROR *******************************************************************
             if (containsUnicode(isabelleErrors)) {
 
-              val all_text = extract.extractText(filePath)
+              val all_text = extractText(filePath)
               val replaced_text = replaceUnicode(all_text)
               injectAll(filePath, replaced_text)
 
@@ -202,7 +204,7 @@ object isabellm {
                println("Unbound schematic variable, sending to LLM for correction...")
               println(s"LLM Iteration ${iter + 1} of $maxIters")
 
-              callLLM(thy, statement, isabelleErrors, line, json_path)
+              callLLM(thy, all_statement, statement, isabelleErrors, line, json_path)
               iter += 1
             }
             
@@ -250,7 +252,7 @@ object isabellm {
             println("Alternative error detected. Sending to LLM for correction...")
             println(s"LLM Iteration ${iter + 1} of $maxIters")
 
-            callLLM(thy, statement, isabelleErrors, line, json_path)
+            callLLM(thy, all_statement, statement, isabelleErrors, line, json_path)
             iter += 1
 
           }   

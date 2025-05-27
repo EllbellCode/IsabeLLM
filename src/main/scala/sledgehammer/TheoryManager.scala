@@ -1,3 +1,6 @@
+
+package sledgehammer
+
 // This file is heavily inspired by the work done on Portal to ISAbelle (PISA)
 // for more information on PISA, go to https://github.com/albertqjiang/Portal-to-ISAbelle
 // FOr this file in particular, go to 

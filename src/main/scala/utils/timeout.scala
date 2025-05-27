@@ -1,3 +1,6 @@
+
+package utils
+
 //FUNCTIONALITY FOR DEALING WITH ISABELLE BUILD TIMEOUTS
 
 import scala.io.Source
