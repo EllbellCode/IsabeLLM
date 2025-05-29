@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/3fcde3e1-7b60-47e9-892f-b5ec6bc65e27)# IsabeLLM
+# IsabeLLM
 IsabeLLM is a tool that integrates a Large Language Model with the theorem prover [Isabelle](https://isabelle.in.tum.de) via an API.
 
 
