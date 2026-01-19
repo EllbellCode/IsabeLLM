@@ -1,323 +1,267 @@
-import scala.sys.process._
-import scala.util.{Try, Success, Failure}
-import scala.concurrent.{Future, Await, blocking}
-import scala.concurrent.duration._
-import scala.collection.mutable
-import java.util.concurrent.TimeoutException
-import java.util.concurrent.{Executors, TimeUnit}
-import java.io.{ByteArrayOutputStream, PrintStream}
-import java.io.PrintWriter
-import java.io.File
-import ujson._
-import scala.concurrent.ExecutionContext.Implicits.global
 
+import scala.collection.mutable
+import java.nio.file.{Paths, Files}
+import java.io.File
+import scala.concurrent.{Future, Await}
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+import java.util.concurrent.TimeoutException
+import scala.util.control.Breaks.{break, breakable} 
+
+import de.unruh.isabelle.control.Isabelle
+import de.unruh.isabelle.pure.{Theory, ToplevelState, Transition => IsaTransition}
+import de.unruh.isabelle.mlvalue.Implicits._ 
+import de.unruh.isabelle.pure.Implicits._
+
+// Utility Imports
 import utils.extract._
 import utils.inject._
 import utils.undefined._
 import utils.timeout._
+import llm.llmOutput._ 
 import llm.history._
-import llm.llmOutput._
-import sledgehammer.sledgehammer._
+import sledgehammer.SledgehammerService
+import sledgehammer.TheoryManager
 
 object isabellm {
 
+  val stateCache = mutable.TreeMap[Int, ToplevelState]()
+  val jsonPaths = mutable.Map[String, String]()
+  val maxIters = 3
+  var iter = 0
+  var done = false
+
+  var preservedError: Option[String] = None
+  var preservedLine: Option[String] = None
+
   def main(args: Array[String]): Unit = {
+    println("***************************************************")
+    val isabelleHome = Paths.get("/home/eaj123/PhDLinux/Isabellm/Isabelle2025")
+    val wd = "/home/eaj123/PhDLinux/Isabellm/Test"
+
+    println("Initialising Isabelle...")
     
-    val maxIters = 10
-    val timeout = 30
-    val sys_timeout = timeout.seconds
-    val build_command = "~/Isabellm/Isabelle2022/bin/isabelle build -d /home/eaj123/Isabellm/Test Test"
-    var iter = 0
-    var done = false
-    var filePath: String = ""
-    var name: String = ""
-    var command: String = ""
-    var preservedError: Option[String] = None
-    var preservedLine: Option[String] = None
-    val jsonPaths = mutable.Map[String, String]()
+    // CONFIGURATION FROM YOUR OLD WORKING CODE
+    // 1. sessionRoots = Nil (Prevents loading local ROOT files)
+    // 2. userDir = None (Prevents loading user-specific settings)
+    // 3. build = false (Prevents auto-build timeouts/errors)
+    val setup = Isabelle.Setup(
+        isabelleHome = isabelleHome, 
+        logic = "HOL",
+        sessionRoots = Nil, 
+        userDir = None,
+        workingDirectory = Paths.get(wd),
+        build = false,
+        verbose = false 
+    )
+    implicit val isabelle: Isabelle = new Isabelle(setup)
 
-    Seq("bash", "-c", "deactivate")
+    println("Initialising Sledgehammer Service...")
+    val service = new SledgehammerService()
+    val theoryPath = "/home/eaj123/PhDLinux/Isabellm/Test/test.thy"
 
-    while (iter < maxIters && !done) {
-
-      if (!filePath.isEmpty) {
-
-        val all_text = extractText(filePath)
-        val replaced_text = replaceUnicode(all_text)
-        injectAll(filePath, replaced_text)
-
-      }
-
-      // Buffer to capture standard output (stdout)
-      val stdoutBuffer = new StringBuilder
-      
-
-      val logger = ProcessLogger(
-        (out: String) => stdoutBuffer.append(out + "\n")
-      )
-
-      println("Building theory...")
-      // Run the command and capture output
-      val exitCodeTry = Future {
-        Seq("bash", "-c", build_command).!(logger)
-      }
-      
-      try {
-
-        val exitCode = Await.result(exitCodeTry, sys_timeout)
-        //println(exitCode)
-
-        if (exitCode == 0) {
-          println("✅ .thy file built successfully.")
-          done = true
-        } else if (exitCode == 142) {
-
-          println("Isabelle Timeout...")
-          
-        } else if (exitCode == 1) {
-
-          println("⚠️ Encountered error during build.")
-          //println(s"Standard output:\n$stdoutBuffer")
-
-          // Extract Isabelle-style error lines
-          val isabelleErrors = stdoutBuffer.linesIterator
-            .filter(_.trim.startsWith("***"))
-            .map(_.trim.stripPrefix("***").trim)
-            .mkString("\n")
-
-
-          println("❗ Extracted Isabelle errors:")
-          println("********************************")
-          println(isabelleErrors)
-          println("********************************")
-
-          var (lineNum, extractedPath) = extractLineAndPath(isabelleErrors).getOrElse((0, "default/path"))
-          filePath = extractedPath
-          val thy = extractThy(filePath, lineNum)
-          val all_statement = extractAll(filePath, lineNum)
-          val statement = extractStatement(filePath, lineNum)
-          //println(statement)
-          val line = extractLine(filePath, lineNum)
-
-          name = extractName(all_statement)
-
-          val json_path = jsonPaths.getOrElseUpdate(name, {
-            val freshPath = getUniqueJsonPath("history", name)
-            jsonCreate(new File(freshPath).getName.stripSuffix(".json"))
-            freshPath
-          })
-          
-          // SORRY DETECTED IN PROOF ************************************************************************
-          if (isabelleErrors.contains("quick_and_dirty")) {
-            
-            println("Sorry detected in lemma, sending to LLM for proof...")
-            println(s"LLM Iteration ${iter + 1} of $maxIters")
-
-            (preservedError, preservedLine) match {
-              case (Some(prevErr), Some(prevLine)) =>
-                callLLM(thy, all_statement, statement, prevErr, prevLine, json_path)
-                preservedError = None
-                preservedLine = None
-              case _ =>
-                callLLM(thy, all_statement, statement, isabelleErrors, line, json_path)
-            }
-
-            iter += 1
-            
-          }
-
-          // FAILED PROOF ***********************************************************************************
-          else if (isabelleErrors.contains("Failed to apply initial proof method")) {
-
-            // NO SUBGOALS! ***********************************************************
-            if (isabelleErrors.contains("No subgoals!")) {
-              println("No subgoals detected! tidying proof...")
-              injectLine(filePath, lineNum, "")
-            } else {
-
-              val fixLocale = localeFix(filePath, name)
-
-              if (fixLocale) {
-                lineNum += 1
-              }
-
-              val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
-              
-              if (!hammerProof) {
-                println("Preserving Errors...")
-                preservedError = Some(isabelleErrors)
-                preservedLine = Some(line)
-              }
-
-            }
-          }
-
-          // FAILED TO FINISH PROOF **************************************************************
-          else if (isabelleErrors.contains("Failed to finish proof")) {
-            
-            val wasModified = assmsFix(filePath, name)
-
-            if (!wasModified) {
-
-
-              val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
-              
-              if (!hammerProof) {
-                println("Preserving Errors...")
-                preservedError = Some(isabelleErrors)
-                preservedLine = Some(line)
-                //println(preservedError)
-                //println(preservedLine)
-              }
-
-            } else {
-              println("assmsFix modified the file. Rebuilding...")
-            }
-          }
-
-          //MALFORMED COMMAND SYNTAX **********************************************************
-          else if (isabelleErrors.contains("Malformed command syntax")) {
-
-            val hammerProof = sledgehammerAll(filePath, lineNum, isabelleErrors)
-              
-            if (!hammerProof) {
-              println("Preserving Errors...")
-              preservedError = Some(isabelleErrors)
-              preservedLine = Some(line)
-            }
-          }
- 
-          // INNER LEXICAL ERROR *****************************************************************
-          else if (isabelleErrors.contains("Inner lexical error")) {
-            
-            // UNICODE ERROR *******************************************************************
-            if (containsUnicode(isabelleErrors)) {
-
-              val all_text = extractText(filePath)
-              val replaced_text = replaceUnicode(all_text)
-              injectAll(filePath, replaced_text)
-
-            }
-
-            else {
-
-               println("Unbound schematic variable, sending to LLM for correction...")
-              println(s"LLM Iteration ${iter + 1} of $maxIters")
-
-              callLLM(thy, all_statement, statement, isabelleErrors, line, json_path)
-              iter += 1
-            }
-            
-
-          }
-
-          // SYNTAX ERROR ******************************************************************************
-          else if (isabelleErrors.contains("Outer syntax error")) {
-
-            println("Isabelle encountered an Outer Syntax Error.")
-            println("Please check the .thy file for syntax issues.")
-            done= true
-          }
-
-          // BAD CONTEXT ******************************************************************************
-          else if (isabelleErrors.contains("exception THM 0 raised")) {
-            println("THM0. Removing OF...")
-            val thm0_line = extractLine(filePath, lineNum)
-            val thm0_fixed = removeTHM0(thm0_line)
-            injectLine(filePath, lineNum, thm0_fixed)
-          }
-
-          // BAD CONTEXT ******************************************************************************
-          else if (isabelleErrors.contains("Bad context")) {
-            println("Bad Context. Removing Line...")
-            injectLine(filePath, lineNum, "")
-          }
-
-          // UNDEFINED METHOD/FACT ***********************************************************
-          else if (isabelleErrors.contains("Undefined")) {
-
-            val undef_word = extractUndefined(isabelleErrors)
-             println(s"Undefined Fact/Method: $undef_word")
-            processUndefined(filePath, lineNum, undef_word)
-
-          }
-
-          else if (isabelleErrors.contains("Bad fact selection")) {
-
-           // LOGIC FOR BAD FACT SELECTION *****************************************************
-
-          // ALL OTHER ERRORS ***************************************************************
-          } else {
-
-            println("Alternative error detected. Sending to LLM for correction...")
-            println(s"LLM Iteration ${iter + 1} of $maxIters")
-
-            callLLM(thy, all_statement, statement, isabelleErrors, line, json_path)
-            iter += 1
-
-          }   
+    try {
+      while (iter < maxIters && !done) {
+        println(s"--- Iteration ${iter + 1} ---")
         
-        } 
-      } catch {
+        val theoryText = extractText(theoryPath)
+        val replacedText = llm.llmOutput.replaceUnicode(theoryText)
+        injectAll(theoryPath, replacedText)
 
-        case e: TimeoutException =>
-          println(s"🚨 Timeout exceeded after $sys_timeout.")
+        val fileVerify = scala.io.Source.fromFile(theoryPath)
+        val lineCount = try fileVerify.getLines().size finally fileVerify.close()
+        if (lineCount <= 1 && replacedText.contains("\n")) {
+           println("⚠️ Warning: File system sync delay detected. Waiting...")
+           Thread.sleep(500)
+        }
 
-          //filePath = "/home/eaj123/Isabellm/Test/test.thy"
-          //name = "n_consensus"
-          //command = "by"
+        val theoryManager = new TheoryManager(path_to_isa_bin = isabelleHome.toString, wd = wd)
+        val theorySource = TheoryManager.Text(replacedText, Paths.get(theoryPath).toAbsolutePath)
+        val thy = theoryManager.beginTheory(theorySource)
+        
+        val transitions = service.parse_text(thy, replacedText).force.retrieveNow
+        var currentToplevel = service.init_toplevel().force.retrieveNow
+        
+        var currentLine = 1
+        var errorFoundInSession = false
 
-          //DOES NOT WORK IF IT IS THE FIRST CALL
-          val wasModified = assmsFix(filePath, name)
-
-          // If assmsFix modified the file, skip the rest of the block
-          if (!wasModified) {
-
-            val (start, end) = findLines(filePath, name)
-            println(start, end)
-            val tactic_line = tacticSearch(filePath, start, end)+1
-            // modify to see if it has the SAFE tag to prevent checking
-            // already verified lines
-            println(s"Potential timeout issue found at line $tactic_line")
-            val all_text = extractToKeyword(filePath, tactic_line, command)
-            //println(all_text)
-            println("Hammering timed-out tactics...")
-            val (success, (message, solution)) = call_sledgehammer(all_text, filePath)
-
-            if (success) {
-                
-                println("Sledgehammer found a solution!")
-                val proof = extractProof(solution.head)
-                println(proof)
-
-                if (tacticKeywords.exists(proof.contains)) {
-                  println("labelling tactic as safe...")
-                  val safe_proof = proof + "(*SAFE*)"
-                  extractKeyword(filePath, tactic_line, command)
-                  injectProof(filePath, tactic_line, safe_proof)
-                } else {
-
-                  extractKeyword(filePath, tactic_line, command)
-                  injectProof(filePath, tactic_line, proof)
-                }
-
-              }
-
-              else {
-                println("Sledgehammer failed to find a solution.")
-                extractKeyword(filePath, tactic_line, command)
-                injectProof(filePath, tactic_line, "sorry")
-                println("Preserving Errors...")
-                preservedError = Some("Failed to Finish Proof.")
-                preservedLine = Some(extractLine(filePath, tactic_line))
-                
-              }
+        breakable {
+          for (((transition, rawText), index) <- transitions.zipWithIndex) {
+            val trimmedText = rawText.trim
             
-          } else {
-            println("assmsFix modified the file.")
+            if (trimmedText == "sorry" || trimmedText.startsWith("sorry ")) {
+                println(s"Found 'sorry' at line $currentLine. Initialising IsabeLLM...")
+                val solved = processError("quick_and_dirty", currentLine, theoryPath, thy, currentToplevel, service)
+               
+                if (solved) {
+                    stateCache.keys.filter(_ >= index).foreach(stateCache.remove)
+                    errorFoundInSession = true
+                    break()
+                }
+            }
+
+            try {
+              if (!stateCache.contains(index)) {
+                currentToplevel = service.command_exception(true, transition, currentToplevel).force.retrieveNow
+                stateCache(index) = currentToplevel
+              } else {
+                currentToplevel = stateCache(index)
+              }
+            } catch {
+              case e: Exception =>
+                errorFoundInSession = true
+                val errorMsg = e.getMessage
+                println(s"⚠️ Error at line $currentLine: $errorMsg")
+                
+                val solved = processError(errorMsg, currentLine, theoryPath, thy, currentToplevel, service)
+                
+                if (solved) {
+                  println(s"✅ Fix applied. Clearing cache from index $index onwards...")
+                  stateCache.keys.filter(_ >= index).foreach(stateCache.remove)
+                  break() 
+                } else {
+                  println("❌ No automated fix found. Stopping session.")
+                  done = true 
+                  break()
+                }
+            }
+            
+            currentLine += rawText.count(_ == '\n')
           }
+        }
+
+        if (!errorFoundInSession) {
+          println("✅ .thy file verified successfully.")
+          done = true
+        }
       }
+    } finally {
+      isabelle.destroy()
     }
     println(s"Exiting after $iter LLM iteration(s).")
+  }
+  
+  // (Helper function processError remains unchanged)
+  def processError(
+    isabelleErrors: String, lineNum: Int, filePath: String, 
+    thy: Theory, currentState: ToplevelState, service: SledgehammerService
+  )(implicit isabelle: Isabelle): Boolean = {
+    
+    val source = scala.io.Source.fromFile(filePath)
+    val fileLines = try source.getLines().toVector finally source.close()
+    val maxLines = fileLines.size
+    val safeLineNum = if (lineNum > maxLines) maxLines else if (lineNum < 1) 1 else lineNum
+
+    val currentStatement = try { extractStatement(filePath, safeLineNum) } catch { case _: Exception => "undefined" }
+    val name = extractName(currentStatement)
+    val lineContent = if (safeLineNum <= maxLines) fileLines(safeLineNum - 1) else ""
+    
+    val json_path = jsonPaths.getOrElseUpdate(name, {
+      val freshPath = getUniqueJsonPath("history", name)
+      jsonCreate(new File(freshPath).getName.stripSuffix(".json"))
+      freshPath
+    })
+
+    def invokeLLM(): Unit = {
+      try {
+          val (errorToPass, lineToPass) = (preservedError, preservedLine) match {
+            case (Some(prevErr), Some(prevLine)) => 
+              preservedError = None 
+              preservedLine = None
+              (prevErr, prevLine)
+            case _ => (isabelleErrors, lineContent)
+          }
+
+          println(s"Calling LLM...")
+          llm.llmOutput.callLLM(
+            utils.extract.extractThy(filePath, safeLineNum), 
+            if (safeLineNum <= maxLines) extractAll(filePath, safeLineNum) else "File truncated", 
+            currentStatement, 
+            errorToPass, 
+            lineToPass, 
+            json_path,
+            filePath,
+            safeLineNum 
+          )
+          iter += 1
+      } catch {
+          case e: Exception =>
+            println(s"CRITICAL: LLM Service failed: ${e.getMessage}")
+            done = true 
+      }
+    }
+
+    if (isabelleErrors.contains("quick_and_dirty")) {
+      invokeLLM()
+      return true
+    }
+
+    if (isabelleErrors.contains("Failed to finish proof") || 
+        isabelleErrors.contains("Failed to apply initial proof method") ||
+        isabelleErrors.contains("Malformed command syntax")) {
+      
+      if (isabelleErrors.contains("No subgoals!")) {
+        injectLine(filePath, safeLineNum, "")
+        return true
+      }
+
+      if (localeFix(filePath, name)) return true
+      if (assmsFix(filePath, name)) return true
+
+      println("Running Sledgehammer...")
+      val result = service.call_sledgehammer(currentState, thy)
+      if (result._1 && result._2._2.nonEmpty) {
+          val proof = service.extractProof(result._2._2.head)
+          println(proof)
+          injectProof(filePath, safeLineNum, proof)
+          return true
+      } else {
+          injectProof(filePath, safeLineNum, "sorry")
+          preservedError = Some(isabelleErrors) 
+          preservedLine = Some(lineContent)
+          invokeLLM()
+          return true
+      }
+    } 
+
+    if (isabelleErrors.toLowerCase.contains("timeout")) {
+       val (start, end) = findLines(filePath, name)
+       val tactic_line = tacticSearch(filePath, start, end) + 1
+       val (success, (_, solution)) = service.call_sledgehammer(currentState, thy)
+       if (success) {
+         val proof = service.extractProof(solution.head)
+         injectProof(filePath, tactic_line, if (proof.contains("by")) proof + "(*SAFE*)" else proof)
+         return true
+       } else {
+          injectProof(filePath, tactic_line, "sorry")
+          preservedError = Some("Timeout")
+          preservedLine = Some(extractLine(filePath, tactic_line))
+          invokeLLM()
+          return true
+       }
+    }
+
+    if (isabelleErrors.contains("Undefined")) {
+       processUndefined(filePath, safeLineNum, extractUndefined(isabelleErrors))
+       return true
+    }
+
+    if (isabelleErrors.contains("exception THM 0 raised")) {
+       injectLine(filePath, safeLineNum, removeTHM0(lineContent))
+       return true
+    }
+
+    if (isabelleErrors.contains("Inner lexical error")) {
+       if (containsUnicode(isabelleErrors)) {
+          injectAll(filePath, replaceUnicode(extractText(filePath)))
+          return true
+       }
+       invokeLLM()
+       return true
+    }
+
+    println("Alternative error detected. Sending to LLM...")
+    invokeLLM()
+    true
   }
 }

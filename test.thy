@@ -28,4 +28,59 @@ next
   qed 
 qed
 
+lemma height_mono_n: 
+  "nHeight t < nHeight t' \<Longrightarrow> 
+   nHeight t \<ge> foldr max (map nHeight ts) 0 \<Longrightarrow>
+   nHeight (nNode x (t#ts)) < nHeight (nNode x (t'#ts))"
+proof -
+  assume h_t_lt: "nHeight t < nHeight t'"
+  assume h_t_ge: "nHeight t \<ge> foldr max (map nHeight ts) 0"
+
+  have "nHeight (nNode x (t#ts)) = Suc (foldr max (map nHeight (t#ts)) 0)"
+    by auto
+  also have "... = Suc (max (nHeight t) (foldr max (map nHeight ts) 0))"
+    by simp
+  also have "... = Suc (nHeight t)"
+    by (simp add: h_t_ge)
+  finally have h_node_t: "nHeight (nNode x (t#ts)) = Suc (nHeight t)" .
+
+  have "nHeight (nNode x (t'#ts)) = Suc (foldr max (map nHeight (t'#ts)) 0)"
+    by auto
+  also have "... = Suc (max (nHeight t') (foldr max (map nHeight ts) 0))"
+    by simp
+  also have "... = Suc (nHeight t')"
+    using h_t_ge h_t_lt by auto
+  finally have h_node_t': "nHeight (nNode x (t'#ts)) = Suc (nHeight t')" .
+  
+  show "nHeight (nNode x (t#ts)) < nHeight (nNode x (t'#ts))"
+  using h_node_t h_node_t' h_t_lt by linarith
+qed 
+
+lemma obtainmax:
+  assumes "ts \<noteq> []"
+  shows "\<exists>t' \<in> set ts. \<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
+  using assms
+proof (induction ts)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons a ts)
+  show ?case
+  proof (cases "ts = []")
+    case True
+    then show ?thesis using Cons by simp
+  next
+    case False
+    then obtain t' where *: "t'\<in>set ts" and **: " \<forall>t''\<in>set ts - {t'}. nHeight t'' \<le> nHeight t'" using Cons(1) by blast
+    show ?thesis
+    proof (cases "nHeight a \<ge> nHeight t'")
+      case True
+      then show ?thesis using ** by force
+    next
+      case False
+      then show ?thesis using * ** using insert_iff by fastforce
+    qed
+  qed
+qed
+
 end

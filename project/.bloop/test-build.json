@@ -2,15 +2,15 @@
     "version": "1.4.0",
     "project": {
         "name": "test-build",
-        "directory": "/home/eaj123/Isabellm/Test/project",
-        "workspaceDir": "/home/eaj123/Isabellm/Test/project",
+        "directory": "/home/eaj123/PhDLinux/Isabellm/Test/project",
+        "workspaceDir": "/home/eaj123/PhDLinux/Isabellm/Test/project",
         "sources": [
-            "/home/eaj123/Isabellm/Test/project/src/main/scala",
-            "/home/eaj123/Isabellm/Test/project/src/main/scala-2.12",
-            "/home/eaj123/Isabellm/Test/project/src/main/scala-2",
-            "/home/eaj123/Isabellm/Test/project/src/main/java",
-            "/home/eaj123/Isabellm/Test/project/src/main/scala-sbt-1.0",
-            "/home/eaj123/Isabellm/Test/project/target/scala-2.12/sbt-1.0/src_managed/main"
+            "/home/eaj123/PhDLinux/Isabellm/Test/project/src/main/scala",
+            "/home/eaj123/PhDLinux/Isabellm/Test/project/src/main/scala-2.12",
+            "/home/eaj123/PhDLinux/Isabellm/Test/project/src/main/scala-2",
+            "/home/eaj123/PhDLinux/Isabellm/Test/project/src/main/java",
+            "/home/eaj123/PhDLinux/Isabellm/Test/project/src/main/scala-sbt-1.0",
+            "/home/eaj123/PhDLinux/Isabellm/Test/project/target/scala-2.12/sbt-1.0/src_managed/main"
         ],
         "dependencies": [
             
@@ -104,11 +104,11 @@
             "/home/eaj123/.cache/coursier/v1/https/repo1.maven.org/maven2/org/reactivestreams/reactive-streams/1.0.3/reactive-streams-1.0.3.jar",
             "/home/eaj123/.cache/coursier/v1/https/repo1.maven.org/maven2/com/typesafe/config/1.4.2/config-1.4.2.jar"
         ],
-        "out": "/home/eaj123/Isabellm/Test/project/.bloop/test-build",
-        "classesDir": "/home/eaj123/Isabellm/Test/project/.bloop/test-build/scala-2.12/sbt-1.0/classes",
+        "out": "/home/eaj123/PhDLinux/Isabellm/Test/project/.bloop/test-build",
+        "classesDir": "/home/eaj123/PhDLinux/Isabellm/Test/project/.bloop/test-build/scala-2.12/sbt-1.0/classes",
         "resources": [
-            "/home/eaj123/Isabellm/Test/project/src/main/resources",
-            "/home/eaj123/Isabellm/Test/project/target/scala-2.12/sbt-1.0/resource_managed/main"
+            "/home/eaj123/PhDLinux/Isabellm/Test/project/src/main/resources",
+            "/home/eaj123/PhDLinux/Isabellm/Test/project/target/scala-2.12/sbt-1.0/resource_managed/main"
         ],
         "scala": {
             "organization": "org.scala-lang",
@@ -215,7 +215,7 @@
             "config": {
                 "home": "/home/eaj123/.sdkman/candidates/java/11.0.11-open",
                 "options": [
-                    "-Duser.dir=/home/eaj123/Isabellm/Test/project"
+                    "-Duser.dir=/home/eaj123/PhDLinux/Isabellm/Test/project"
                 ]
             },
             "mainClass": [
@@ -224,11 +224,11 @@
             "runtimeConfig": {
                 "home": "/home/eaj123/.sdkman/candidates/java/11.0.11-open",
                 "options": [
-                    "-Duser.dir=/home/eaj123/Isabellm/Test/project"
+                    "-Duser.dir=/home/eaj123/PhDLinux/Isabellm/Test/project"
                 ]
             },
             "classpath": [
-                "/home/eaj123/Isabellm/Test/project/.bloop/test-build/scala-2.12/sbt-1.0/classes",
+                "/home/eaj123/PhDLinux/Isabellm/Test/project/.bloop/test-build/scala-2.12/sbt-1.0/classes",
                 "/home/eaj123/.cache/coursier/v1/https/repo1.maven.org/maven2/ch/epfl/scala/sbt-bloop_2.12_1.0/2.0.9/sbt-bloop_2.12_1.0-2.0.9.jar",
                 "/home/eaj123/.cache/coursier/v1/https/repo1.maven.org/maven2/ch/epfl/scala/bloop-config_2.12/2.3.2/bloop-config_2.12-2.3.2.jar",
                 "/home/eaj123/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/plokhotnyuk/jsoniter-scala/jsoniter-scala-core_2.12/2.13.5.2/jsoniter-scala-core_2.12-2.13.5.2.jar",

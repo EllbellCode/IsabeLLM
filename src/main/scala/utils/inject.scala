@@ -6,67 +6,56 @@ import java.nio.charset.StandardCharsets
 import scala.io.Source
 import java.io.{PrintWriter, File}
 
-// Functionality for injecting information into a .thy file
-
 object inject {
 
-    val statementKeywords = Set(
-        "lemma ", "theorem ", "proposition ", "corollary "
-    )
+    // Added more keywords and made them regex-ready
+    val statementKeywords = Set("lemma", "theorem", "proposition", "corollary")
+    val otherKeywords = Set("datatype", "definition", "fun", "value", "section", "record", "text", "locale", "inductive_set")
+    val headerKeywords = Set("theory", "imports", "begin")
 
-    val otherKeywords = Set(
-        "datatype ", "definition ", "fun ", "value ", "section", "record", "text", "locale ", "end", "inductive_set"
-    )
-
-    val proofKeywords = List(
-        "unfolding ", "using ", "proof", "by ", "apply", "sorry "
-    )
-
-    val intermediateKeywords = Set(
-    "hence ", "thus ", "obtain ", "show ", "ultimately ", "moreover ", "then "
-    )
-    
-    // Injects a new lemma and proof imto a thy file replacing, the existing one*******************
     def injectLemma(newLemma: String, filePath: String, errorLine: Int): Unit = {
-
         val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
+        
+        // Ensure we don't start at a negative index if errorLine is 0
+        val searchStart = Math.max(0, errorLine - 1)
 
-        // Find the start line (first line with a statement keyword)
-        val start = (errorLine - 1 to 0 by -1).find { i =>
-            val trimmed = lines(i).trim
+        // 1. Find the start of the lemma (search backwards)
+        val startOpt = (searchStart to 0 by -1).find { i =>
+            val trimmed = lines(i).trim.toLowerCase
             statementKeywords.exists(kw => trimmed.startsWith(kw))
-        }.getOrElse(0)
+        }
 
-        // Find the end of the block (where a new top-level keyword appears)
-        val end = (start + 1 until lines.length).find { i =>
-            val trimmed = lines(i).trim
-            val isNewTopLevel =
-                (statementKeywords.exists(kw => trimmed.startsWith(kw)) && i != start) ||
-                otherKeywords.exists(kw => trimmed.startsWith(kw))
-            isNewTopLevel
-        }.getOrElse(lines.length)
+        startOpt match {
+            case Some(start) =>
+                // 2. Find the end of the block (search forwards)
+                // We look for the NEXT top-level keyword or the end of the file
+                val end = (start + 1 until lines.length).find { i =>
+                    val trimmed = lines(i).trim.toLowerCase
+                    val isNewBlock = (statementKeywords ++ otherKeywords ++ Set("end")).exists(kw => trimmed.startsWith(kw))
+                    isNewBlock
+                }.getOrElse(lines.length)
 
-        // Create a new version of the file content with the lemma replaced
-        val updatedLines =
-            lines.slice(0, start) ++
-            newLemma.stripLineEnd.split("\n") ++
-            lines.slice(end, lines.length)
+                // 3. Construct the updated content
+                val updatedLines = 
+                    lines.slice(0, start) ++ 
+                    newLemma.stripLineEnd.split("\n") ++ 
+                    lines.slice(end, lines.length)
 
-        // Write the updated content back to the file
-        Files.write(Paths.get(filePath), updatedLines.mkString("\n").getBytes(StandardCharsets.UTF_8))
+                Files.write(Paths.get(filePath), updatedLines.mkString("\n").getBytes(StandardCharsets.UTF_8))
+                println(s"Successfully injected lemma at lines $start to $end")
+
+            case None =>
+                println(s"❌ Error: Could not find a lemma/theorem keyword backwards from line $errorLine.")
+                if (lines.indices.contains(errorLine - 1)) 
+                    println(s"Line $errorLine content: ${lines(errorLine - 1)}")
+        }
     }
 
-    //injects a new line in place of the given line ******************************************
+    // Injects a new line in place of the given line
     def injectLine(filePath: String, lineNumber: Int, newText: String): Unit = {
-        // Read all lines from the file
         val lines = Source.fromFile(filePath).getLines().toList
-
-        // Check if the lineNumber is valid
         if (lineNumber >= 1 && lineNumber <= lines.length) {
-            // Modify the specific line
             val updatedLines = lines.updated(lineNumber - 1, newText)
-
-            // Write the updated content back to the file
             val writer = new PrintWriter(new File(filePath))
             updatedLines.foreach(writer.println)
             writer.close()
@@ -85,18 +74,28 @@ object inject {
         }
     }
 
-    // injects a proof at a given line
+    // MODIFIED: Smart injectProof that replaces the existing proof method
     def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
-        // Read all lines from the file
         val lines = Source.fromFile(filePath).getLines().toList
-
-        // Check if the lineNumber is valid
         if (lineNumber >= 1 && lineNumber <= lines.length) {
-            // Append text to the specific line
-            val updatedLine = lines(lineNumber - 1) + " " + proof
-            val updatedLines = lines.updated(lineNumber - 1, updatedLine)
+            val originalLine = lines(lineNumber - 1)
 
-            // Write the updated content back to the file
+            // Regex explanation:
+            // \s* -> Matches optional whitespace
+            // (sorry|...) -> Matches specific keywords: sorry, oops
+            // |         -> OR
+            // (by\s+.*) -> Matches 'by' followed by spaces and any text until the end
+            // (apply\s+.*) -> Matches 'apply' followed by spaces and any text (careful usage)
+            // $         -> Ensures it matches at the very end of the line
+            val proofTerminals = """(\s*sorry\s*$)|(\s*oops\s*$)|(\s*by\s+.*$)|(\s*apply\s+.*$)"""
+            
+            // Remove the old failing method
+            val cleanedLine = originalLine.replaceAll(proofTerminals, "")
+            
+            // Append the new proof (ensure exactly one space separator)
+            val updatedLine = cleanedLine + " " + proof
+            
+            val updatedLines = lines.updated(lineNumber - 1, updatedLine)
             val writer = new PrintWriter(new File(filePath))
             updatedLines.foreach(writer.println)
             writer.close()

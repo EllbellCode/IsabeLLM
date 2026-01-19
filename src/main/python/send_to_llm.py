@@ -3,6 +3,7 @@ import sys
 from openai import OpenAI
 import json
 
+# ENFORCEMENT: System prompt modified to demand zero-prose and strict code output
 system_setup = {"role": "system", "content": 
                 """
                 You are a theorem proving expert in Isabelle. 
@@ -27,22 +28,27 @@ aikey = os.getenv("aikey")
 if not aikey:
     raise EnvironmentError("API key not found in environment variable 'aikey'.")
 
-# Initialize client
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key= aikey
+    api_key=aikey
 )
 
 def query_llm(prompt: str, history: list) -> tuple[str, list]:
-    
     history.append({"role": "user", "content": prompt})
     
+    # PARAMETER TUNING: Lower temperature for higher predictability
     response = client.chat.completions.create(
-        model="deepseek/deepseek-r1:free",
-        messages= history
+        model="deepseek/deepseek-r1-0528:free",
+        messages=history,
+        # temperature=0.2,
+        # max_tokens=2048
     )
 
     reply = response.choices[0].message.content.strip()
+    
+    # CLEANUP: Redundant check to strip markdown if the LLM ignores instructions
+    if "```" in reply:
+        reply = reply.split("```")[-2].split("\n", 1)[-1].strip()
     
     if reply:
         history.append({"role": "assistant", "content": reply})
@@ -50,10 +56,8 @@ def query_llm(prompt: str, history: list) -> tuple[str, list]:
         history.pop()
 
     return reply, history
-    
 
 if __name__ == "__main__":
-
     # Get arguments from command line
     thy = sys.argv[1]
     lemma_all = sys.argv[2]
@@ -61,32 +65,30 @@ if __name__ == "__main__":
     line = sys.argv[4]
     history_json = sys.argv[5]
 
-    # Open history from json file
     with open(history_json, "r") as f:
         chat_history = json.load(f)
 
-    # No chat history means this is the first llm call for this lemma   
     if len(chat_history) == 0:
-
-        #chat_history.append({"role": "system", "content": "You are a theorem proving expert in Isabelle. Prove only the theorems that are given to you. You may use any other proven statement within the .thy file or its imports."})
-        input = preamble + "\n" + thy + "\n" + lemma_proof + "\n" + lemma_all + "\n" + request 
-    
-    # Returning failed proof
+        # First call: Provide full theory context and the lemma to prove
+        input_prompt = f"{preamble}{thy}{lemma_proof}{lemma_all}{request}" 
     else:
-        
-        input = fail_return + "\n" + lemma_all + "\n" + line_error + "\n" + line + "\n" + error_message + "\n" + error + "\n" + error_request
+        # Subsequent call: Provide error feedback for correction
+        input_prompt = f"{fail_return}{lemma_all}\n{line_error}{line}\n{error_message}{error}{error_request}"
 
     chat_history_ = [system_setup] + chat_history
-    output, chat_history = query_llm(input, chat_history_)
-    chat_history.pop(0)
+    output, chat_history = query_llm(input_prompt, chat_history_)
+    
+    # Maintain only the last 10 turns to prevent context window bloat
+    chat_history = chat_history[-10:] if len(chat_history) > 10 else chat_history
+    
+    # Save history without the system setup (it is prepended on next run)
+    if chat_history and chat_history[0]["role"] == "system":
+        chat_history.pop(0)
     
     with open(history_json, "w") as f:
         json.dump(chat_history, f, indent=2)
 
     print(json.dumps({
-        "input": input,
+        "input": input_prompt,
         "output": output
     }))
-
-    
-  

@@ -1,204 +1,157 @@
-
 package utils
 
 import java.io.File
 import scala.io.Source
-import java.io.PrintWriter
-
-
-// Functionality for extracting information from a .thy file
-// Using data from error messages when running isabelle build
 
 object extract {
 
-    val statementKeywords = Set(
-        "lemma ", "theorem ", "proposition ", "corollary "
-    )
+    val statementKeywords = Set("lemma ", "theorem ", "proposition ", "corollary ")
+    val otherKeywords = Set("datatype ", "definition ", "fun ", "value ", "section", "record", "text", "locale ", "end", "inductive_set")
+    val proofKeywords = List("unfolding", "using", "proof", "by", "apply", "sorry")
 
-    val otherKeywords = Set(
-        "datatype ", "definition ", "fun ", "value ", "section", "record", "text", "locale ", "end", "inductive_set"
-    )
-
-    val proofKeywords = List(
-        "unfolding ", "using ", "proof", "by ", "apply", "sorry "
-    )
-
-    val intermediateKeywords = Set(
-    "hence ", "thus ", "obtain ", "show ", "ultimately ", "moreover ", "then "
-    )
-    
-    // Extracts the path to the file that produced the error
-    // And the line number the error took place *************************************************************
+    // Extracts line and path from error message (unchanged as it parses the error string)
     def extractLineAndPath(errorMessage: String): Option[(Int, String)] = {
-        val pattern = """line (\d+) of "(.+?\.thy)"""".r
+        
+        val linePattern = """line (\d+)""".r
+        val pathPattern = """"(.+?\.thy)"""".r
 
-        val matches = pattern.findAllMatchIn(errorMessage).map { m =>
-            val lineNumber = m.group(1).toInt
-            val rawPath = m.group(2)
-            val fullPath = if (rawPath.startsWith("~")) {
-            rawPath.replaceFirst("^~", System.getProperty("user.home"))
-            } else {
-            rawPath
-            }
-            (lineNumber, fullPath)
-        }.toList
+        val lineMatch = linePattern.findFirstMatchIn(errorMessage).map(_.group(1).toInt)
+        val pathMatch = pathPattern.findFirstMatchIn(errorMessage).map(_.group(1))
 
-        matches.sortBy(_._1).headOption
+        (lineMatch, pathMatch) match {
+            case (Some(l), Some(p)) => 
+                Some((l, p.replaceFirst("^~", System.getProperty("user.home"))))
+            case (Some(l), None) => 
+                // If path is missing, we at least have the line number
+                Some((l, "")) 
+            case _ => None
+        }
     }
 
-    // Extracts A Statement from a .thy file using the Path and Error line *********************************8
-    def extractStatement(filePath: String, errorLine: Int): String = {
-        val statementKeywords = Set(
-            "lemma ", "theorem ", "proposition ", "corollary "
-        )
-
-        val proofKeywords = List(
-            "unfolding", "using", "proof", "by", "apply", "sorry"
-        )
-
-        val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
-
-        // 1. Find the start of the statement
+    def extractStatement(theoryText: String, errorLine: Int): String = {
+        val lines = theoryText.split("\n", -1).toIndexedSeq
         val start = (errorLine - 1 to 0 by -1).find { i =>
             val trimmed = lines(i).trim
             statementKeywords.exists(kw => trimmed.startsWith(kw))
         }.getOrElse(0)
 
-        // 2. Collect lines until a proof keyword is found
         val statementLines = scala.collection.mutable.ArrayBuffer[String]()
         var reachedProof = false
 
-        def findFirstKeywordOutsideQuotes(line: String): Option[(String, Int)] = {
-            var inQuotes = false
-            var i = 0
-            while (i < line.length) {
+        for (i <- start until lines.length if !reachedProof) {
+            val line = lines(i).trim
+            val proofIdx = findFirstKeywordOutsideQuotes(line)
+            proofIdx match {
+                case Some((_, 0)) if line.nonEmpty => reachedProof = true
+                case Some((_, idx)) =>
+                    val truncated = lines(i).substring(0, idx).trim
+                    if (truncated.nonEmpty) statementLines.append(truncated)
+                    reachedProof = true
+                case None => statementLines.append(lines(i))
+            }
+        }
+        statementLines.mkString("\n")
+    }
+
+    private def findFirstKeywordOutsideQuotes(line: String): Option[(String, Int)] = {
+        var inQuotes = false
+        for (i <- 0 until line.length) {
             if (line.charAt(i) == '"') inQuotes = !inQuotes
             else if (!inQuotes) {
                 for (kw <- proofKeywords) {
-                if (line.startsWith(kw, i) && (i == 0 || line.charAt(i - 1).isWhitespace)) {
-                    return Some((kw, i))
-                }
+                    if (line.startsWith(kw, i) && (i == 0 || line.charAt(i - 1).isWhitespace)) return Some((kw, i))
                 }
             }
-            i += 1
-            }
-            None
         }
-
-        for (i <- start until lines.length if !reachedProof) {
-            val line = lines(i).trim
-            findFirstKeywordOutsideQuotes(line) match {
-            case Some((kw, 0)) if line == kw => // whole line is just a proof keyword like "sorry"
-                reachedProof = true
-            case Some((kw, idx)) =>
-                val truncated = lines(i).substring(0, idx).trim
-                if (truncated.nonEmpty) statementLines.append(truncated)
-                reachedProof = true
-            case None =>
-                statementLines.append(lines(i))
-            }
-        }
-
-        statementLines.mkString("\n")
+        None
     }
 
-
-    // Extracts everything within a Statement
-    // Includes the Statement name, the statement itself, and the proof of the statement******************
     def extractAll(filePath: String, errorLine: Int): String = {
-
+      
         val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
+        if (lines.isEmpty) return "" // Handle empty file
 
-        // 1. Find the start line (first line with a statement keyword)
-        val start = (errorLine - 1 to 0 by -1).find { i =>
-        val trimmed = lines(i).trim
-        statementKeywords.exists(kw => trimmed.startsWith(kw))
-        }.getOrElse(0)
+        // Ensure errorLine doesn't exceed bounds
+        val safeErrorIndex = Math.min(errorLine - 1, lines.length - 1)
 
-        val statementLines = scala.collection.mutable.ArrayBuffer[String]()
-        // 2. Collect lines until another top-level keyword is found
-        for (i <- start until lines.length) {
-            val trimmed = lines(i).trim
-
-            val isNewTopLevel =
-                statementKeywords.exists(kw => trimmed.startsWith(kw)) && i != start || 
-                otherKeywords.exists(kw => trimmed.startsWith(kw))
-
-            if (isNewTopLevel) {
-                // Stop before the new block
-                return statementLines.mkString("\n")
-            }   else {
-                    statementLines.append(lines(i))
-                }
-        }
-
-        statementLines.mkString("\n")
-    }
-    
-    // Extracts everything in the .thy file before the Statement we are working on************************
-    def extractThy(filePath: String, errorLine: Int): String = {
-        val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
-
-        // 1. Find the start line (first line with a statement keyword)
-        val start = (errorLine - 1 to 0 by -1).find { i =>
+        // 1. Find the start line safely
+        val start = (safeErrorIndex to 0 by -1).find { i =>
             val trimmed = lines(i).trim
             statementKeywords.exists(kw => trimmed.startsWith(kw))
         }.getOrElse(0)
 
-        // 2. Collect all lines before the start of the statement
-        val linesBeforeStatement = lines.take(start)
+        val statementLines = scala.collection.mutable.ArrayBuffer[String]()
+        
+        // 2. Collect lines safely
+        for (i <- start until lines.length) {
+            val trimmed = lines(i).trim
+            val isNewTopLevel =
+                (statementKeywords.exists(kw => trimmed.startsWith(kw)) && i != start) || 
+                otherKeywords.exists(kw => trimmed.startsWith(kw))
 
-        // 4. Return everything before the statement
-        linesBeforeStatement.mkString("\n")
-    }
-
-    //Extracts the line  from the file
-    def extractLine(filePath: String, errorLine: Int): String = {
-
-        val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
-
-        if (errorLine >= 1 && errorLine <= lines.length) lines(errorLine - 1)
-        else ""
-    }
-
-    // Returns the name of Statement
-    // Use on the output of extractStatement! ********************************************************** 
-    def extractName(statement: String): String = {
-        val keywords = Set("lemma", "theorem", "proposition", "corollary")
-        val keywordPattern = keywords.mkString("|")
-        val pattern = s"""^\\s*($keywordPattern)\\s+(\\w+).*""".r
-
-        statement.linesIterator.collectFirst {
-            case pattern(_, name) => name
-        }.getOrElse("default_name")
-    }
-
-    // Extracts everything from a thy file ***********************************************************
-    def extractText(filePath: String): String = {
-        val file = new File(filePath)
-
-        if (!file.exists || !file.getName.endsWith(".thy")) {
-            throw new IllegalArgumentException(s"Invalid file: $filePath")
+            if (isNewTopLevel) {
+                return statementLines.mkString("\n")
+            } else {
+                statementLines.append(lines(i))
+            }
         }
+        statementLines.mkString("\n")
+    }
 
-        val source = Source.fromFile(file)
+    def extractKeyword(theoryText: String, lineNumber: Int, keyword: String): String = {
+        val lines = theoryText.split("\n", -1).toIndexedSeq
+        if (lineNumber < 1 || lineNumber > lines.length) return theoryText
+
+        val updatedLine = lines(lineNumber - 1).trim match {
+            case line if line.contains(keyword) =>
+                val before = line.substring(0, line.indexOf(keyword))
+                if (before.contains("using")) before.substring(0, before.indexOf("using")).trim else before.trim
+            case line if line.contains("using") => line.substring(0, line.indexOf("using")).trim
+            case line => line
+        }
+        lines.updated(lineNumber - 1, updatedLine).mkString("\n")
+    }
+
+    def extractName(statement: String): String = {
+        val pattern = """^\s*(?:lemma|theorem|proposition|corollary)\s+(\w+).*""".r
+        statement.linesIterator.collectFirst { case pattern(name) => name }.getOrElse("default_name")
+    }
+
+    def extractText(filePath: String): String = {
+        val source = Source.fromFile(new File(filePath))
+        try { source.getLines().mkString("\n") } finally { source.close() }
+    }
+
+    def extractCommand(errorMessage: String): String = 
+        """At command "([^"]+)"""".r.findFirstMatchIn(errorMessage).map(_.group(1)).getOrElse("")
+
+    def extractLine(filePath: String, lineNum: Int): String = {
+        val source = scala.io.Source.fromFile(filePath)
         try {
-            source.getLines().mkString("\n")
+            source.getLines().drop(lineNum - 1).next()
         } finally {
             source.close()
         }
     }
 
-    // Extract the command from an error message *****************************************************
-    def extractCommand(errorMessage: String): String = {
-        val pattern = """At command "([^"]+)"""".r
-        pattern.findFirstMatchIn(errorMessage) match {
-            case Some(m) => m.group(1)
-            case None => ""
-        }
+    def extractThy(filePath: String, errorLine: Int): String = {
+      
+        val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
+        if (lines.isEmpty) return "" // Handle empty file
+
+        // Ensure errorLine doesn't exceed bounds
+        val safeErrorIndex = Math.min(errorLine - 1, lines.length - 1)
+
+        // Find the start line safely
+        val start = (safeErrorIndex to 0 by -1).find { i =>
+            val trimmed = lines(i).trim
+            statementKeywords.exists(kw => trimmed.startsWith(kw))
+        }.getOrElse(0)
+
+        val linesBeforeStatement = lines.take(start)
+        linesBeforeStatement.mkString("\n")
     }
 
-    // EXTRACTS A FILE UP TO THE SPECIFIED LINE BUT ONLY EVERYTHING BEFORE THE SPECIFIED KEYWORD *************************
     def extractToKeyword(filePath: String, lineNumber: Int, keyword: String): String = {
         val source = Source.fromFile(filePath)
         val result = new StringBuilder
@@ -243,40 +196,4 @@ object extract {
 
         result.toString().stripTrailing()
     }
-
-    // REMOVES EVERYTHING INLCUDING AND AFTER A KEYWORD IN A SPECIFIED FILE LINE ****************************************** 
-    def extractKeyword(filePath: String, lineNumber: Int, keyword: String): Unit = {
-        val lines = Source.fromFile(filePath).getLines().toList
-
-        val updatedLines = lines.zipWithIndex.map {
-            case (line, idx) if idx + 1 == lineNumber =>
-            val trimmedLine = line.trim
-            val keywordIndex = trimmedLine.indexOf(keyword)
-
-            if (keywordIndex != -1) {
-                val beforeKeyword = trimmedLine.substring(0, keywordIndex)
-                val usingIndex = beforeKeyword.indexOf("using")
-                if (usingIndex != -1)
-                beforeKeyword.substring(0, usingIndex).trim
-                else
-                beforeKeyword.trim
-            } else {
-                val usingIndex = trimmedLine.indexOf("using")
-                if (usingIndex != -1)
-                trimmedLine.substring(0, usingIndex).trim
-                else
-                trimmedLine
-            }
-
-            case (line, _) => line
-        }
-
-        val writer = new PrintWriter(filePath)
-        try {
-            updatedLines.foreach(writer.println)
-        } finally {
-            writer.close()
-        }
-    }
-
 }
