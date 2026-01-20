@@ -27,7 +27,7 @@ class SledgehammerService(implicit isabelle: Isabelle) {
     private val proverStruct       = setupThy.importMLStructureNow("Sledgehammer_Prover")
 
     lazy val init_toplevel: de.unruh.isabelle.mlvalue.MLFunction0[ToplevelState] = 
-        compileFunction0[ToplevelState]("Toplevel.init_toplevel")
+        compileFunction0[ToplevelState]("fn () => Toplevel.make_state NONE")
 
     lazy val parse_text: de.unruh.isabelle.mlvalue.MLFunction2[Theory, String, List[(IsaTransition, String)]] = 
         compileFunction[Theory, String, List[(IsaTransition, String)]](
@@ -64,7 +64,7 @@ class SledgehammerService(implicit isabelle: Isabelle) {
         |             val results = ${sledgehammerStruct}.run_sledgehammer params ${proverStruct}.Normal NONE 1 override p_state;
         |             val (result, (outcome, step)) = results;
         |           in
-        |             (result, (${sledgehammerStruct}.short_string_of_sledgehammer_outcome outcome, [YXML.content_of step]))
+        |             (result, (${sledgehammerStruct}.short_string_of_sledgehammer_outcome outcome, [XML.content_of (YXML.parse_body step)]))
         |           end;
         |    in
         |      Timeout.apply (Time.fromSeconds 90) go_run (state, thy) end
