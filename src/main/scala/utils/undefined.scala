@@ -52,7 +52,6 @@ object undefined {
     def removeUsing(filePath: String, lineNumber: Int): Unit = {
         val expandedPath = filePath.replaceFirst("^~", System.getProperty("user.home"))
         
-        // FIXED: Uses readFile/writeFile pattern (though manually implemented here to match original style)
         val source = scala.io.Source.fromFile(expandedPath)
         val lines = try source.getLines().toList finally source.close()
 
@@ -82,7 +81,6 @@ object undefined {
         }
     }
 
-    // FIXED: Now takes filePath, reads content, modifies it, and WRITES IT BACK.
     def processUndefined(filePath: String, lineNumber: Int, word: String): Unit = {
         
         val currentText = readFile(filePath) // 1. Read

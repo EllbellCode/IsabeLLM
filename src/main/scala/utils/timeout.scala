@@ -19,7 +19,6 @@ object timeout {
         "blast", "metis", "auto"
     )
 
-    // Helper to safely read lines and close the file handle immediately
     private def getLinesSafe(filePath: String): List[String] = {
         val source = Source.fromFile(filePath)
         try {
@@ -30,7 +29,6 @@ object timeout {
     }
 
     def findLines(filePath: String, lemmaName: String): (Int, Int) = {
-        // FIXED: Uses getLinesSafe
         val lines = getLinesSafe(filePath)
         
         val lemmaLineOpt = lines.zipWithIndex.find {
@@ -52,7 +50,6 @@ object timeout {
     }
 
     def tacticSearch(filePath: String, start: Int, end: Int): Int = {
-        // FIXED: Uses getLinesSafe
         val lines = getLinesSafe(filePath)
         
         (start to end).collectFirst {
@@ -66,18 +63,29 @@ object timeout {
         val (startLine, endLine) = findLines(filePath, lemmaName)
         if (startLine == -1 || endLine == -1) return false
 
-        // FIXED: Uses getLinesSafe
         val lines = getLinesSafe(filePath)
         
+        // Find the "proof" command (or apply, but typically proof for structured scripts)
         val proofStartIdx = (startLine to endLine).find(i => lines(i).trim.startsWith("proof")).getOrElse(-1)
         if (proofStartIdx == -1) return false
 
         val lemmaSection = lines.slice(startLine, endLine + 1)
         val proofLineRelIdx = proofStartIdx - startLine
-        val usesAssmsAnywhere = lemmaSection.exists(_.contains("assms"))
+
+        // 1. Check the Header (lines before 'proof') for "assumes"
+        val header = lemmaSection.take(proofLineRelIdx)
+        val headerHasAssumes = header.exists(line => line.trim.startsWith("assumes") || line.contains(" assumes "))
+
+        // 2. Check the Body for "assms" usage (backward compatibility)
+        val body = lemmaSection.drop(proofLineRelIdx)
+        val bodyHasRef = body.exists(_.contains("assms"))
+
+        // Check if "using assms" is already present immediately before the proof command
         val alreadyCorrect = proofLineRelIdx > 0 && lemmaSection(proofLineRelIdx - 1).trim == "using assms"
 
-        if (usesAssmsAnywhere && !alreadyCorrect) {
+        // If we have assumptions (in header or referenced) and we aren't using them, inject.
+        if ((headerHasAssumes || bodyHasRef) && !alreadyCorrect) {
+            println(s"Detected missing 'using assms' for lemma '$lemmaName'. Injecting...")
             val (beforeProof, afterProof) = lemmaSection.splitAt(proofLineRelIdx)
             val newLemmaSection = beforeProof ++ List("  using assms") ++ afterProof
             val newFile = lines.take(startLine) ++ newLemmaSection ++ lines.drop(endLine + 1)
@@ -94,7 +102,6 @@ object timeout {
     }
 
     def localeFix(filePath: String, lemmaName: String): Boolean = {
-        // FIXED: Uses getLinesSafe
         val lines = getLinesSafe(filePath)
         
         case class Locale(name: String, start: Int, end: Int, assumptions: List[String])

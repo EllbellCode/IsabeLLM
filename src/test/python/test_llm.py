@@ -1,3 +1,7 @@
+"""
+Used to test the OpenRouter API connection
+"""
+
 import os
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
@@ -20,7 +24,7 @@ def test_api():
 
     try:
         response: ChatCompletion = client.chat.completions.create(
-            model="deepseek/deepseek-r1:free",
+            model="deepseek/deepseek-r1-0528:free",
             messages=messages
         )
 

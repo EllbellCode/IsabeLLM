@@ -59,28 +59,59 @@ qed
 lemma obtainmax:
   assumes "ts \<noteq> []"
   shows "\<exists>t' \<in> set ts. \<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
+ proof -
+  let ?S = "set (map nHeight ts)"
+  have "?S \<noteq> {}" using assms by auto
+  moreover have "finite ?S" by simp
+  ultimately have "Max ?S \<in> ?S" using Max_in by blast
+  then obtain t' where "t' \<in> set ts" and max_height: "nHeight t' = Max ?S"
+    by (smt (verit, ccfv_threshold) image_iff list.set_map)
+  then have "\<forall>t'' \<in> set ts. nHeight t'' \<le> nHeight t'"
+    using Max_ge \<open>finite ?S\<close> \<open>?S \<noteq> {}\<close> max_height by auto
+  then show ?thesis using \<open>t' \<in> set ts\<close> by auto
+qed
+
+lemma foldr_max_eq:
+  assumes "t' \<in> set ts" 
+    and "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
+  shows "foldr max (map nHeight ts) 0 = nHeight t'"
   using assms
-proof (induction ts)
+proof (induct ts)
   case Nil
   then show ?case by simp
 next
-  case (Cons a ts)
-  show ?case
-  proof (cases "ts = []")
+  case (Cons t ts')
+  then show ?case
+  proof (cases "t = t'")
     case True
-    then show ?thesis using Cons by simp
+    have "foldr max (map nHeight (t # ts')) 0 = max (nHeight t) (foldr max (map nHeight ts') 0)"
+      by simp
+    also have "... = max (nHeight t') (foldr max (map nHeight ts') 0)"
+      using True by simp
+    also have "... = nHeight t'"
+    proof -
+      from Cons.prems have "\<forall>t''\<in>set ts'. nHeight t'' \<le> nHeight t'"
+        using True by auto
+      then have "foldr max (map nHeight ts') 0 \<le> nHeight t'"
+ sorry
+      moreover have "nHeight t' \<ge> 1"
+        by (induction t') auto
+      ultimately show ?thesis
+        by linarith
+    qed
+    finally show ?thesis by simp
   next
     case False
-    then obtain t' where *: "t'\<in>set ts" and **: " \<forall>t''\<in>set ts - {t'}. nHeight t'' \<le> nHeight t'" using Cons(1) by blast
-    show ?thesis
-    proof (cases "nHeight a \<ge> nHeight t'")
-      case True
-      then show ?thesis using ** by force
-    next
-      case False
-      then show ?thesis using * ** using insert_iff by fastforce
-    qed
+    then have "t' \<in> set ts'"
+      using Cons.prems(1) by auto
+    moreover have "\<forall>t''\<in>set ts' - {t'}. nHeight t'' \<le> nHeight t'"
+      using Cons.prems(2) False by auto
+    ultimately have "foldr max (map nHeight ts') 0 = nHeight t'"
+      using Cons.hyps by simp
+    moreover have "nHeight t \<le> nHeight t'"
+      using Cons.prems(2) False by auto
+    ultimately show ?thesis
+      by (simp add: max.absorb3)
   qed
 qed
-
 end

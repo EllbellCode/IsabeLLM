@@ -5,7 +5,6 @@ package llm
 
 import java.io.File
 import scala.sys.process._
-
 import utils.extract._
 import utils.inject._
 
@@ -37,12 +36,13 @@ object llmOutput {
             'λ' -> "\\<lambda>"
     )
 
-    val tacticKeywords = Set("simp", "blast", "auto", "metis", "fastforce", "force", "presburger")
+    val tacticKeywords = Set("simp", "blast", "auto", "metis", "fastforce", "force", "presburger", "smt")
 
     def containsUnicode(input: String): Boolean = {
         unicodeMap.keys.exists(input.contains(_))
     }
     
+    // Normalizes Unicode symbols to Isabelle ASCII format
     def replaceUnicode(input: String): String = {
         if (containsUnicode(input)) {
             println("Modifying UniCode Symbols...")
@@ -54,7 +54,32 @@ object llmOutput {
         }
     }
 
+    // Convert all whitespace runs to single spaces for robust comparison
     def normalizeWhitespace(s: String): String = s.replaceAll("\\s+", " ").trim
+
+    // Sophisticated search: maps normalized index back to raw index
+    // This allows finding the statement even if line breaks/indentation differ
+    def findStartIndex(rawInput: String, normalizedStatement: String): Option[Int] = {
+        val normalizedInput = normalizeWhitespace(rawInput)
+        val startNormIndex = normalizedInput.indexOf(normalizedStatement)
+        
+        if (startNormIndex < 0) None
+        else {
+            var rawPos = 0
+            var normPos = 0
+            while (rawPos < rawInput.length && normPos < startNormIndex) {
+                val c = rawInput.charAt(rawPos)
+                if (Character.isWhitespace(c)) {
+                    while (rawPos < rawInput.length && Character.isWhitespace(rawInput.charAt(rawPos))) rawPos += 1
+                    normPos += 1 
+                } else {
+                    rawPos += 1
+                    normPos += 1
+                }
+            }
+            Some(rawPos)
+        }
+    }
 
     def findProofBlock(text: String): String = {
         val lines = text.linesIterator.toVector
@@ -73,56 +98,64 @@ object llmOutput {
         lines.take(endIndex + 1).mkString("\n")
     }
 
-    def sanitise(s: String): String = {
-        // Specifically targets Unicode non-breaking spaces + standard whitespace
-        s.replaceAll("[\u00A0\\s]+", " ").trim
-    }
-
     def extractCode(input: String, statement: String): String = {
         val backtickPattern = """(?s)```[^\n]*\n(.*?)```""".r
         
+        // 1. Try extracting from backticks first
         backtickPattern.findFirstMatchIn(input) match {
-            case Some(m) => m.group(1).trim
+            case Some(m) => 
+                println("Extracting Isabelle code from backticks...")
+                m.group(1).trim
             case None =>
-                val cleanInput = sanitise(input)
-                val cleanStmt = sanitise(statement)
+                // 2. Fallback: Look for the specific lemma statement
+                val normalizedStmt = normalizeWhitespace(statement)
+                findStartIndex(input, normalizedStmt) match {
+                    case Some(start) =>
+                        println(s"Statement found at raw input index $start")
+                        val after = input.substring(start)
+                        findProofBlock(after).trim
+                    case None =>
+                        // 3. Last Resort: Scan for the first line starting with a proof keyword
+                        val lines = input.linesIterator.toVector
+                        val startKeywords = Set("proof", "apply", "by", "lemma", "theorem", "proposition")
+                        
+                        val startLineIndex = lines.indexWhere { line => 
+                            val t = line.trim
+                            // Matches "proof", "proof -", "by auto", etc.
+                            startKeywords.exists(kw => t.startsWith(kw) && (t.length == kw.length || !t(kw.length).isLetterOrDigit))
+                        }
 
-                if (cleanInput.contains(cleanStmt)) {
-                    // Use the first line of the lemma as a search anchor in the raw text
-                    val searchAnchor = statement.split("\n").head.trim.take(20)
-                    val startIndex = input.indexOf(searchAnchor)
-                    
-                    if (startIndex != -1) {
-                        // Extract from the lemma start to the 'qed' or last tactic
-                        findProofBlock(input.substring(startIndex)).trim
-                    } else {
-                        input.trim
-                    }
-                } else {
-                    // Fallback if the LLM only gave the proof body
-                    if (input.toLowerCase.contains("proof")) findProofBlock(input).trim
-                    else ""
+                        if (startLineIndex != -1) {
+                             println(s"Found raw code start at line ${startLineIndex + 1}")
+                             val codeBlock = lines.drop(startLineIndex).mkString("\n")
+                             findProofBlock(codeBlock).trim
+                        } else {
+                             println("No code block found.")
+                             ""
+                        }
                 }
-        }
-    }
-
-    def processOutput(input: String, statement: String): String = {
-        println("Processing output...")
-        
-        val rawCode = extractCode(input, statement)
-        
-        if (rawCode.nonEmpty) {
-            // Step 2: Transform symbols ONLY on the extracted code
-            val unicodeStep = replaceUnicode(rawCode)
-            val applyStep = replaceApply(unicodeStep)
-            applyStep
-        } else {
-            ""
         }
     }
 
     def replaceApply(input: String): String = {
         input.replaceAll("\\bapply\\b", "by")
+    }
+
+    def processOutput(input: String, statement: String): String = {
+        println("Processing output...")
+        
+        // CRITICAL FIX: Replace Unicode *before* extraction so symbols match
+        val unicodeStep = replaceUnicode(input)
+        
+        // Use robust extraction on the normalized text
+        val rawCode = extractCode(unicodeStep, statement)
+        
+        if (rawCode.nonEmpty) {
+            val applyStep = replaceApply(rawCode)
+            applyStep
+        } else {
+            ""
+        }
     }
 
     def callLLM(
@@ -133,10 +166,8 @@ object llmOutput {
         line: String, 
         jsonPath: String, 
         filePath: String,
-        lineNum: Int  // NEW: Pass the integer line number directly
+        lineNum: Int 
     ): Option[String] = {
-        
-        // REMOVED: The old logic that tried to extract line from the 'error' string
         
         var result: Option[String] = None
         var success = false
@@ -149,11 +180,16 @@ object llmOutput {
                 val stderr = new StringBuilder
                 val stdout = new StringBuilder
 
-                val scriptPath = "/home/eaj123/PhDLinux/Isabellm/Test/src/main/python/send_to_llm.py"
+                // Make sure this path is correct for your environment!
+                val scriptPath = "src/main/python/send_to_llm.py" 
                 val pythonCommand = Seq("python3", scriptPath, currentThyContent, all, error, line, jsonPath)
 
+                println("Querying the LLM...")
                 val exitCode = pythonCommand ! ProcessLogger(stdout.append(_), stderr.append(_))
+
                 val llm_output = stdout.toString().trim
+
+                println(s"RAW OUTPUT: [$llm_output]")
 
                 if (exitCode != 0 || llm_output.isEmpty) {
                     println(s"❌ Python script failed with exit code $exitCode")
@@ -162,16 +198,24 @@ object llmOutput {
                 val parsed = ujson.read(llm_output)
                 val output = parsed("output").str
 
+                println(s"PARSED OUTPUT: [$output]")
+
                 if (output.nonEmpty) {
                     val refined_output = processOutput(output, statement)
-                    println(refined_output)
+
+                    println(s"OUTPUT: [$refined_output']")
+                    
                     if (refined_output.nonEmpty) {
-                        
                         println(s"Injecting following proof into $filePath at line $lineNum:")
-                        utils.inject.injectLemma(refined_output, filePath, lineNum) 
                         result = Some(refined_output)
                         success = true
+                    } else {
+                        println("Warning: Extracted code was empty.")
                     }
+                } else {
+
+                    println("❌ LLM returned empty output. Python stderr:")
+                    println(stderr.toString()) 
                 }
             } catch {
                 case e: Exception => 
