@@ -75,7 +75,7 @@ def enrich_proof_with_context(thy_path, lemma_stmt, raw_proof):
     return enriched
 
 # ==========================================
-# 2. STORAGE & RAG SYSTEM
+# 2. STORAGE & RAG SYSTEM (With Filtering)
 # ==========================================
 
 chroma_client = chromadb.PersistentClient(path="./RAGdb")
@@ -122,17 +122,65 @@ def store_proof(thy_path, lemma_text, proof_code, overwrite=True):
     update_json_mirror(lemma_text, final_proof)
     sys.stderr.write(f"Saved enriched proof for: {lemma_text[:30]}...\n")
 
+def extract_core_statement(text):
+    """
+    Aggressively normalizes a lemma statement for comparison.
+    Removes headers, names, quotes, and all whitespace.
+    """
+    if not text: return ""
+    
+    # 1. Remove outer context/headers
+    # Matches "lemma (context) 'name':" or just "lemma 'name':"
+    clean = re.sub(r'^(?:lemma|theorem|corollary|proposition|subgoal)\s*(?:\(.*\))?\s*(?:\"[\w\']+\")?\s*:?', '', text.strip(), flags=re.IGNORECASE)
+    
+    # 2. Remove the name if it wasn't caught above (e.g. "lemma my_name:")
+    clean = re.sub(r'^[\w\']+\s*:', '', clean)
+
+    # 3. Remove quotes
+    clean = clean.replace('"', '').replace("'", "")
+
+    # 4. Remove all whitespace
+    clean = "".join(clean.split())
+    
+    return clean
+
 def get_rag_context(current_lemma):
     if collection.count() == 0: return ""
+    
+    # Normalise the current lemma immediately
+    current_core = extract_core_statement(current_lemma)
+    
     query_vec = embedder.encode([current_lemma]).tolist()
-    results = collection.query(query_embeddings=query_vec, n_results=3)
+    # Fetch more results (10) to allow for filtering duplicates/self
+    results = collection.query(query_embeddings=query_vec, n_results=10)
     
     msg = "\n\n### Reference: Similar Successful Proofs ###\n"
     found = False
+    count = 0
+
     if results['documents'] and results['documents'][0]:
-        for i, (doc, meta) in enumerate(zip(results['documents'][0], results['metadatas'][0])):
+        for doc, meta in zip(results['documents'][0], results['metadatas'][0]):
+            
+            stored_raw = meta.get('lemma', '')
+            stored_core = extract_core_statement(stored_raw)
+
+            # FILTER: Strict comparison of normalized strings
+            if current_core == stored_core:
+                sys.stderr.write(f"[RAG] Skipping self-reference: {stored_raw[:30]}...\n")
+                continue
+            
+            # Double check: if the raw text is suspiciously similar (e.g. 95% substring match)
+            if current_lemma.strip() in stored_raw or stored_raw in current_lemma.strip():
+                 sys.stderr.write(f"[RAG] Skipping subset match: {stored_raw[:30]}...\n")
+                 continue
+
             found = True
-            msg += f"\n--- Example {i+1} ---\nLemma: {meta.get('lemma','')}\nProof:\n{doc}\n"
+            count += 1
+            msg += f"\n--- Example {count} ---\nLemma: {stored_raw}\nProof:\n{doc}\n"
+            
+            if count >= 3:
+                break
+
     return msg if found else ""
 
 # ==========================================
@@ -166,27 +214,17 @@ def query_llm(prompt, history, rag_context=""):
         client = get_openai_client()
         messages = [{"role":"system", "content":base_system_content + rag_context}] + history + [{"role":"user", "content":prompt}]
         
-        # Using the requested model with explicit timeout
         response = client.chat.completions.create(
             model = "tngtech/deepseek-r1t2-chimera:free",
-            # model="deepseek/deepseek-r1-0528:free", 
             messages=messages,
             timeout= 12000
         )
         
         choice = response.choices[0]
-        message = choice.message
-        
-        reply = message.content
+        reply = choice.message.content
 
-        if reply:
-            reply = reply.strip()
-           
-        else:
-            # If standard content is empty, we return empty string.
-            reply = ""
-            sys.stderr.write(f"\n[Error] Standard 'content' field was empty\n")
-            # sys.stderr.write(f"Raw Dump: {response.model_dump()}\n")
+        if reply: reply = reply.strip()
+        else: reply = ""
 
         history.append({"role":"user", "content":prompt})
         history.append({"role":"assistant", "content":reply})
@@ -220,16 +258,25 @@ if __name__ == "__main__":
         line = sys.argv[4]
         history_json = sys.argv[5]
         
+        # Capture error trace from Scala (defaults to empty)
+        error_trace = sys.argv[6] if len(sys.argv) > 6 else ""
+        
         rag_data = get_rag_context(lemma_all)
         
         try:
             with open(history_json, "r") as f: chat_history = json.load(f)
         except: chat_history = []
 
+        # Format Trace Section
+        trace_section = ""
+        if error_trace:
+            trace_section = f"\n\n### Execution Trace ###\nSince your last output, the system attempted the following automated fixes which resulted in the current state:\n{error_trace}\n"
+
         if len(chat_history) == 0:
             input_prompt = f"{preamble}\n{thy}\n{lemma_proof}\n{lemma_all}\n{request}"
         else:
-            input_prompt = f"{fail_return}\n{lemma_all}\n{line_error}\n{line}\n{error_message}\n{error}\n{error_request}"
+            # Inject trace into error prompt
+            input_prompt = f"{fail_return}\n{lemma_all}\n{line_error}\n{line}\n{error_message}\n{error}{trace_section}\n{error_request}"
 
         output, hist = query_llm(input_prompt, chat_history, rag_context=rag_data)
 

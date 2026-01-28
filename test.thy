@@ -73,45 +73,85 @@ qed
 
 lemma foldr_max_eq:
   assumes "t' \<in> set ts" 
-    and "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
-  shows "foldr max (map nHeight ts) 0 = nHeight t'"
+  and "\<forall>t'' \<in> set ts - {t'}. nHeight t'' \<le> nHeight t'"
+shows "foldr max (map nHeight ts) 0 = nHeight t'"
   using assms
-proof (induct ts)
+proof (induction ts arbitrary: t')
   case Nil
   then show ?case by simp
 next
-  case (Cons t ts')
-  then show ?case
-  proof (cases "t = t'")
+  case (Cons x xs)
+  show ?case
+  proof (cases "xs=[]")
     case True
-    have "foldr max (map nHeight (t # ts')) 0 = max (nHeight t) (foldr max (map nHeight ts') 0)"
-      by simp
-    also have "... = max (nHeight t') (foldr max (map nHeight ts') 0)"
-      using True by simp
-    also have "... = nHeight t'"
-    proof -
-      from Cons.prems have "\<forall>t''\<in>set ts'. nHeight t'' \<le> nHeight t'"
-        using True by auto
-      then have "foldr max (map nHeight ts') 0 \<le> nHeight t'"
- sorry
-      moreover have "nHeight t' \<ge> 1"
-        by (induction t') auto
-      ultimately show ?thesis
-        by linarith
-    qed
-    finally show ?thesis by simp
+    then have "x = t'" using Cons(2) by simp
+    then show ?thesis using True by simp
   next
     case False
-    then have "t' \<in> set ts'"
-      using Cons.prems(1) by auto
-    moreover have "\<forall>t''\<in>set ts' - {t'}. nHeight t'' \<le> nHeight t'"
-      using Cons.prems(2) False by auto
-    ultimately have "foldr max (map nHeight ts') 0 = nHeight t'"
-      using Cons.hyps by simp
-    moreover have "nHeight t \<le> nHeight t'"
-      using Cons.prems(2) False by auto
-    ultimately show ?thesis
-      by (simp add: max.absorb3)
+    show ?thesis
+    proof (cases "x = t'")
+      case t1: True
+      then obtain tmax where *: "tmax \<in> set xs" and **: "\<forall>t''\<in>set xs - {tmax}. nHeight t'' \<le> nHeight tmax" using False obtainmax by auto
+      with Cons have ***: "foldr max (map nHeight xs) 0 = nHeight tmax" by simp
+      show ?thesis
+      proof (cases "nHeight x \<ge> nHeight tmax")
+        case True
+        then have "foldr max (map nHeight (x # xs)) 0 = nHeight x" using *** by auto
+        then show ?thesis using t1 by blast
+      next
+        case False
+        then have "foldr max (map nHeight (x # xs)) 0 = nHeight tmax" using *** by auto
+        then show ?thesis using t1 * Cons(3) False by auto
+      qed
+    next
+      case False
+      then have "t' \<in> set (xs)" using Cons by auto
+      moreover from False have *: "nHeight x \<le> nHeight t'" using Cons(3) by simp
+      ultimately have "foldr max (map nHeight xs) 0 = nHeight t'" using Cons by auto
+      then show ?thesis using * by auto
+    qed
+  qed
+qed
+
+lemma foldr_max_eq2:
+  assumes "t' \<in> set ts" 
+  and "\<forall>t'' \<in> set ts - {t'}. nHeight t'' < nHeight t'"
+shows "foldr max (map nHeight ts) 0 = nHeight t'"
+  using foldr_max_eq
+  using assms(1) assms(2) order_less_imp_le by blast
+
+fun nPaths :: "'a nTree \<Rightarrow> 'a list list" where
+"nPaths (nNode x []) = [[x]]"
+|"nPaths (nNode x (t#ts)) = map (\<lambda>p. x # p) (concat (map nPaths (t # ts)))"
+
+fun nLongest :: "'a nTree \<Rightarrow> 'a list set" where
+"nLongest t = set (filter (\<lambda>s. length s = nHeight t) (nPaths t))"
+
+lemma height_eq_len:
+  assumes "p \<in> nLongest t"
+  shows "nHeight t = length p"
+  using assms unfolding nLongest.simps by auto
+ 
+lemma branch_height:
+  assumes  "p \<in> set (nPaths t)"
+  shows "nHeight t \<ge> length p"
+  using assms
+proof (induct t arbitrary: p)
+  case (nNode x ts)
+  then show ?case
+  proof (cases ts)
+    case Nil
+    then show ?thesis using nNode by simp
+  next
+    case (Cons t' ts')
+    then obtain p' where p': "p = x # p'" and p'_in: "p' \<in> set (concat (map nPaths (t' # ts')))"
+      using nNode(2) by auto
+    then obtain sub where sub_in: "sub \<in> set (t' # ts')" and p'_paths: "p' \<in> set (nPaths sub)"
+      by auto
+    have "nHeight sub \<ge> length p'" using nNode.hyps by presburger
+    moreover have "foldr max (map nHeight (t' # ts')) 0 \<ge> nHeight sub"
+      using subtree_height[OF sub_in] .
+    ultimately show ?thesis using Cons p' by auto
   qed
 qed
 end

@@ -42,7 +42,6 @@ object llmOutput {
         unicodeMap.keys.exists(input.contains(_))
     }
     
-    // Normalizes Unicode symbols to Isabelle ASCII format
     def replaceUnicode(input: String): String = {
         if (containsUnicode(input)) {
             println("Modifying UniCode Symbols...")
@@ -54,11 +53,8 @@ object llmOutput {
         }
     }
 
-    // Convert all whitespace runs to single spaces for robust comparison
     def normalizeWhitespace(s: String): String = s.replaceAll("\\s+", " ").trim
 
-    // Sophisticated search: maps normalized index back to raw index
-    // This allows finding the statement even if line breaks/indentation differ
     def findStartIndex(rawInput: String, normalizedStatement: String): Option[Int] = {
         val normalizedInput = normalizeWhitespace(rawInput)
         val startNormIndex = normalizedInput.indexOf(normalizedStatement)
@@ -101,13 +97,11 @@ object llmOutput {
     def extractCode(input: String, statement: String): String = {
         val backtickPattern = """(?s)```[^\n]*\n(.*?)```""".r
         
-        // 1. Try extracting from backticks first
         backtickPattern.findFirstMatchIn(input) match {
             case Some(m) => 
                 println("Extracting Isabelle code from backticks...")
                 m.group(1).trim
             case None =>
-                // 2. Fallback: Look for the specific lemma statement
                 val normalizedStmt = normalizeWhitespace(statement)
                 findStartIndex(input, normalizedStmt) match {
                     case Some(start) =>
@@ -115,13 +109,11 @@ object llmOutput {
                         val after = input.substring(start)
                         findProofBlock(after).trim
                     case None =>
-                        // 3. Last Resort: Scan for the first line starting with a proof keyword
                         val lines = input.linesIterator.toVector
                         val startKeywords = Set("proof", "apply", "by", "lemma", "theorem", "proposition")
                         
                         val startLineIndex = lines.indexWhere { line => 
                             val t = line.trim
-                            // Matches "proof", "proof -", "by auto", etc.
                             startKeywords.exists(kw => t.startsWith(kw) && (t.length == kw.length || !t(kw.length).isLetterOrDigit))
                         }
 
@@ -143,11 +135,7 @@ object llmOutput {
 
     def processOutput(input: String, statement: String): String = {
         println("Processing output...")
-        
-        // CRITICAL FIX: Replace Unicode *before* extraction so symbols match
         val unicodeStep = replaceUnicode(input)
-        
-        // Use robust extraction on the normalized text
         val rawCode = extractCode(unicodeStep, statement)
         
         if (rawCode.nonEmpty) {
@@ -166,7 +154,8 @@ object llmOutput {
         line: String, 
         jsonPath: String, 
         filePath: String,
-        lineNum: Int 
+        lineNum: Int,
+        errorTrace: String // New Argument
     ): Option[String] = {
         
         var result: Option[String] = None
@@ -180,16 +169,20 @@ object llmOutput {
                 val stderr = new StringBuilder
                 val stdout = new StringBuilder
 
-                // Make sure this path is correct for your environment!
                 val scriptPath = "src/main/python/send_to_llm.py" 
-                val pythonCommand = Seq("python3", scriptPath, currentThyContent, all, error, line, jsonPath)
+                // Passed errorTrace as the last argument
+                val pythonCommand = Seq("python3", scriptPath, currentThyContent, all, error, line, jsonPath, errorTrace)
 
                 println("Querying the LLM...")
                 val exitCode = pythonCommand ! ProcessLogger(stdout.append(_), stderr.append(_))
 
                 val llm_output = stdout.toString().trim
 
-                println(s"RAW OUTPUT: [$llm_output]")
+                // println(s"RAW OUTPUT: [$llm_output]")
+
+                // if (stderr.nonEmpty) {
+                //     println(s"🐍 Python Logs:\n$stderr")
+                // }
 
                 if (exitCode != 0 || llm_output.isEmpty) {
                     println(s"❌ Python script failed with exit code $exitCode")
@@ -202,7 +195,6 @@ object llmOutput {
 
                 if (output.nonEmpty) {
                     val refined_output = processOutput(output, statement)
-
                     println(s"OUTPUT: [$refined_output']")
                     
                     if (refined_output.nonEmpty) {
@@ -213,7 +205,6 @@ object llmOutput {
                         println("Warning: Extracted code was empty.")
                     }
                 } else {
-
                     println("❌ LLM returned empty output. Python stderr:")
                     println(stderr.toString()) 
                 }

@@ -42,10 +42,13 @@ object undefined {
     }
 
     def removeTHM0(input: String): String = {
-        val pattern = """\b\w+\[[^\[\]]*\]""".r
+        
+        val pattern = """[\w'\(\)\.]+\s*\[[^\[\]]*\]""".r
+        
         pattern.replaceAllIn(input, m => {
+            // Keep the name (e.g., "nNode(1)"), drop the "[...]"
             val word = m.matched.takeWhile(_ != '[')
-            word
+            word.trim
         })
     }
 

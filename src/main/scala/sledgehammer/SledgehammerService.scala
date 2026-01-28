@@ -55,7 +55,7 @@ class SledgehammerService(implicit isabelle: Isabelle) {
         |          let
         |             val p_state = Toplevel.proof_of state;
         |             val params = ${commandsStruct}.default_params thy
-        |                [("provers", "e zipperposition cvc4"),
+        |                [("provers", "cvc5 verit z3 e spass vampire zipperposition"),
         |                   ("timeout","30"),
         |                   ("verbose","true"), 
         |                   ("slices", "96"),

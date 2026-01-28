@@ -34,11 +34,17 @@ object inject {
                     newLemma.stripLineEnd.split("\n") ++ 
                     lines.slice(end, lines.length)
 
-                Files.write(Paths.get(filePath), updatedLines.mkString("\n").getBytes(StandardCharsets.UTF_8))
-                println(s"Successfully injected lemma at lines $start to $end")
+                val writer = new PrintWriter(new File(filePath))
+                try {
+                    updatedLines.foreach(writer.println)
+                } finally {
+                    writer.close()
+                }
+
+                println(s"Successfully injected lemma at lines ${start + 1} to ${end}")
 
             case None =>
-                println(s"❌ Error: Could not find a lemma/theorem keyword backwards from line $errorLine.")
+                println("Error: Could not find start of lemma block.")
         }
     }
 
@@ -62,17 +68,24 @@ object inject {
             writer.close()
         }
     }
-
-    // Smart injectProof that replaces the existing proof method
+    
     def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
         val lines = Source.fromFile(filePath).getLines().toList
         if (lineNumber >= 1 && lineNumber <= lines.length) {
             val originalLine = lines(lineNumber - 1)
 
-            // Matches sorry, oops, by ..., apply ... at the end of the line to replace them
-            val proofTerminals = """(\s*sorry\s*$)|(\s*oops\s*$)|(\s*by\s+.*$)|(\s*apply\s+.*$)"""
+            // UPDATE 1: Added |(\s*(\.\.|\.)\s*$) to the regex.
+            // This captures "." and ".." at the end of the line so they are removed.
+            val proofTerminals = """(\s*\b(sorry|oops)\b[\s\S]*$)|(\s*\b(by|apply)\b[\s\S]*$)|(\s*(\.\.|\.)\s*$)"""
             
-            val cleanedLine = originalLine.replaceAll(proofTerminals, "")
+            var cleanedLine = originalLine.replaceAll(proofTerminals, "")
+            
+            // UPDATE 2: If the NEW proof starts with "using", remove any existing "using" 
+            // from the cleaned line to avoid "using X using Y" duplication.
+            if (proof.trim.startsWith("using")) {
+                // Strips everything starting from the last " using " to the end
+                cleanedLine = cleanedLine.replaceAll("""\s+\busing\b[\s\S]*$""", "")
+            }
             
             val updatedLine = cleanedLine + " " + proof
             
