@@ -1,0 +1,11 @@
+
+
+
+node_modules/
+build/
+target/
+.bloop/
+.bsp/
+.metals/
+.vscode/
+project/
