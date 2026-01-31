@@ -1,13 +1,7 @@
-// This file is heavily inspired by the work done on Portal to ISAbelle (PISA)
-// for more information on PISA, go to https://github.com/albertqjiang/Portal-to-ISAbelle
-// For this file in particular, go to
-// https://github.com/albertqjiang/Portal-to-ISAbelle/blob/main/src/main/scala/pisa/agent/RepHammer.scala
-
-
 package sledgehammer
 
 import de.unruh.isabelle.control.Isabelle
-import de.unruh.isabelle.mlvalue.{MLFunction4, MLValue}
+import de.unruh.isabelle.mlvalue.{MLFunction2, MLValue}
 import de.unruh.isabelle.mlvalue.MLValue.{compileFunction, compileFunction0}
 import de.unruh.isabelle.pure.{Theory, ToplevelState, Transition => IsaTransition}
 import de.unruh.isabelle.mlvalue.Implicits._
@@ -18,13 +12,16 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class SledgehammerService(implicit isabelle: Isabelle) {
 
-    // Helper theory to load structures safely
     private val setupThy = Theory("Main") 
 
-    // Safely import structures using the API (Matches your old code logic)
+    // Import necessary structures
     private val sledgehammerStruct = setupThy.importMLStructureNow("Sledgehammer")
     private val commandsStruct     = setupThy.importMLStructureNow("Sledgehammer_Commands")
     private val proverStruct       = setupThy.importMLStructureNow("Sledgehammer_Prover")
+    
+    // Nitpick Structures
+    private val nitpickStruct      = setupThy.importMLStructureNow("Nitpick")
+    private val nitpickCmdStruct   = setupThy.importMLStructureNow("Nitpick_Commands")
 
     lazy val init_toplevel: de.unruh.isabelle.mlvalue.MLFunction0[ToplevelState] = 
         compileFunction0[ToplevelState]("fn () => Toplevel.make_state NONE")
@@ -46,7 +43,7 @@ class SledgehammerService(implicit isabelle: Isabelle) {
             "fn (int, tr, st) => Toplevel.command_exception int tr st"
         )
 
-    lazy val sledgehammerML: MLFunction4[ToplevelState, Theory, List[String], List[String], (Boolean, (String, List[String]))] = 
+    lazy val sledgehammerML: de.unruh.isabelle.mlvalue.MLFunction4[ToplevelState, Theory, List[String], List[String], (Boolean, (String, List[String]))] = 
     compileFunction[ToplevelState, Theory, List[String], List[String], (Boolean, (String, List[String]))](
         s""" fn (state, thy, adds, dels) =>
         |    let
@@ -71,6 +68,32 @@ class SledgehammerService(implicit isabelle: Isabelle) {
         |""".stripMargin
     )
 
+    // IMPROVED: Parsing YXML to plain text
+    lazy val nitpickML: MLFunction2[ToplevelState, Theory, String] = 
+    compileFunction[ToplevelState, Theory, String](
+        s""" fn (state, thy) =>
+        |    let
+        |       val p_state = Toplevel.proof_of state;
+        |       
+        |       (* Use default params to avoid type errors *)
+        |       val params = ${nitpickCmdStruct}.default_params thy 
+        |           [("timeout", "10"), ("expect", "genuine"), ("batch_size", "1")];
+        |       
+        |       val mode = ${nitpickStruct}.Auto_Try; 
+        |       val i = 1;      
+        |       val step = 0;   
+        |       
+        |       val (outcome, messages) = ${nitpickStruct}.pick_nits_in_subgoal p_state params mode i step;
+        |       
+        |       (* CRITICAL FIX: Clean YXML markup from messages *)
+        |       val cleaned_msgs = map (fn s => XML.content_of (YXML.parse_body s)) messages;
+        |       val combined_msg = space_implode "\\n" cleaned_msgs;
+        |    in
+        |       if combined_msg = "" then outcome else combined_msg
+        |    end
+        |""".stripMargin
+    )
+
     def call_sledgehammer(currentState: ToplevelState, currentThy: Theory): (Boolean, (String, List[String])) = {
         val sledgeFuture = Future {
             sledgehammerML(currentState, currentThy, Nil, Nil).force.retrieveNow
@@ -79,6 +102,20 @@ class SledgehammerService(implicit isabelle: Isabelle) {
             Await.result(sledgeFuture, 95.seconds)
         } catch {
             case _: Exception => (false, ("Timeout or Error", List()))
+        }
+    }
+
+    def call_nitpick(currentState: ToplevelState, currentThy: Theory): String = {
+        val nitpickFuture = Future {
+            nitpickML(currentState, currentThy).force.retrieveNow
+        }
+        try {
+            Await.result(nitpickFuture, 15.seconds)
+        } catch {
+            case e: Exception => 
+                println(s"!!! NITPICK CRASHED !!!")
+                println(s"Error Message: ${e.getMessage}")
+                "Nitpick timeout or error"
         }
     }
 

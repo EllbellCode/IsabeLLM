@@ -125,33 +125,18 @@ def store_proof(thy_path, lemma_text, proof_code, overwrite=True):
 def extract_core_statement(text):
     """
     Aggressively normalizes a lemma statement for comparison.
-    Removes headers, names, quotes, and all whitespace.
     """
     if not text: return ""
-    
-    # 1. Remove outer context/headers
-    # Matches "lemma (context) 'name':" or just "lemma 'name':"
     clean = re.sub(r'^(?:lemma|theorem|corollary|proposition|subgoal)\s*(?:\(.*\))?\s*(?:\"[\w\']+\")?\s*:?', '', text.strip(), flags=re.IGNORECASE)
-    
-    # 2. Remove the name if it wasn't caught above (e.g. "lemma my_name:")
     clean = re.sub(r'^[\w\']+\s*:', '', clean)
-
-    # 3. Remove quotes
     clean = clean.replace('"', '').replace("'", "")
-
-    # 4. Remove all whitespace
     clean = "".join(clean.split())
-    
     return clean
 
 def get_rag_context(current_lemma):
     if collection.count() == 0: return ""
-    
-    # Normalise the current lemma immediately
     current_core = extract_core_statement(current_lemma)
-    
     query_vec = embedder.encode([current_lemma]).tolist()
-    # Fetch more results (10) to allow for filtering duplicates/self
     results = collection.query(query_embeddings=query_vec, n_results=10)
     
     msg = "\n\n### Reference: Similar Successful Proofs ###\n"
@@ -160,26 +145,16 @@ def get_rag_context(current_lemma):
 
     if results['documents'] and results['documents'][0]:
         for doc, meta in zip(results['documents'][0], results['metadatas'][0]):
-            
             stored_raw = meta.get('lemma', '')
             stored_core = extract_core_statement(stored_raw)
 
-            # FILTER: Strict comparison of normalized strings
-            if current_core == stored_core:
-                sys.stderr.write(f"[RAG] Skipping self-reference: {stored_raw[:30]}...\n")
-                continue
-            
-            # Double check: if the raw text is suspiciously similar (e.g. 95% substring match)
-            if current_lemma.strip() in stored_raw or stored_raw in current_lemma.strip():
-                 sys.stderr.write(f"[RAG] Skipping subset match: {stored_raw[:30]}...\n")
-                 continue
+            if current_core == stored_core: continue
+            if current_lemma.strip() in stored_raw or stored_raw in current_lemma.strip(): continue
 
             found = True
             count += 1
             msg += f"\n--- Example {count} ---\nLemma: {stored_raw}\nProof:\n{doc}\n"
-            
-            if count >= 3:
-                break
+            if count >= 3: break
 
     return msg if found else ""
 
@@ -272,11 +247,24 @@ if __name__ == "__main__":
         if error_trace:
             trace_section = f"\n\n### Execution Trace ###\nSince your last output, the system attempted the following automated fixes which resulted in the current state:\n{error_trace}\n"
 
+        # ----------------------------------------------------
+        # NEW: Critical Context for Nitpick / Counter-Examples
+        # ----------------------------------------------------
+        # Even if history is empty, if we have a counter-example, we must show it.
+        critical_context = ""
+        if error and ("Nitpick" in error or "Counter-example" in error or "genuine" in error):
+             critical_context = f"\n\n### CRITICAL: COUNTER-EXAMPLE FOUND ###\nThe automated tool (Nitpick) found a counter-example to your lemma:\n{error}\n\nSince a counter-example exists, the lemma is likely false. Please MODIFY THE LEMMA STATEMENT (assumptions or conclusion) to exclude this case, or if you believe the lemma is correct, fix the proof structure."
+
         if len(chat_history) == 0:
-            input_prompt = f"{preamble}\n{thy}\n{lemma_proof}\n{lemma_all}\n{request}"
+            if critical_context:
+                 # Inject Critical Context into first prompt
+                 input_prompt = f"{preamble}\n{thy}\n{lemma_proof}\n{lemma_all}\n{critical_context}\n{request}"
+            else:
+                 # Standard first prompt
+                 input_prompt = f"{preamble}\n{thy}\n{lemma_proof}\n{lemma_all}\n{request}"
         else:
-            # Inject trace into error prompt
-            input_prompt = f"{fail_return}\n{lemma_all}\n{line_error}\n{line}\n{error_message}\n{error}{trace_section}\n{error_request}"
+            # Inject trace and critical context into retry prompt
+            input_prompt = f"{fail_return}\n{lemma_all}\n{line_error}\n{line}\n{error_message}\n{error}{trace_section}{critical_context}\n{error_request}"
 
         output, hist = query_llm(input_prompt, chat_history, rag_context=rag_data)
 

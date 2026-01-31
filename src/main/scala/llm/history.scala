@@ -1,42 +1,45 @@
-
 package llm
-
-// Functionality for handling the conversation history with the LLM
 
 import java.io.{File, PrintWriter}
 
 object history {
 
     // Creates a json file for the llm dialogue of a given lemma
-    def jsonCreate(lemmaName: String) = {
-    
-        val file = new File(s"history/$lemmaName.json")
+    // Note: This truncates the file, but getRunHistoryPath guarantees we are passing a new, non-existent file path.
+    def jsonCreate(path: String) = {
+        val file = new File(path)
+        if (file.getParentFile != null) file.getParentFile.mkdirs()
+        
         val writer = new PrintWriter(file)
         writer.write("[]") // Start with empty JSON array
         writer.close()
     }
 
-    // makes a new json file if a json for the same lemma from
-    // a previous isabellm call exists
-    def getUniqueJsonPath(dir: String, baseName: String): String = {
+    // UPDATED: Now ensures uniqueness to prevent overwriting previous runs
+    def getRunHistoryPath(dir: String, lemmaName: String, runId: Int): String = {
         val folder = new File(dir)
         if (!folder.exists()) folder.mkdirs()
 
-        val existingFiles = folder.listFiles().map(_.getName).toSet
+        val baseName = s"${lemmaName}_run_$runId"
 
+        // Helper to generate candidate paths:
+        // 0 -> history/lemma_run_1.json
+        // 1 -> history/lemma_run_1_1.json
+        // 2 -> history/lemma_run_1_2.json
         def buildPath(index: Int): String = {
-            val name = if (index == 0) s"$baseName.json" else s"${baseName}${index}.json"
-            s"$dir/$name"
+            val fileName = if (index == 0) s"$baseName.json" else s"${baseName}_$index.json"
+            s"$dir/$fileName"
         }
 
         var i = 0
-        var newPath = buildPath(i)
-        while (existingFiles.contains(new File(newPath).getName)) {
+        var candidatePath = buildPath(i)
+
+        // Loop until we find a filename that does NOT exist
+        while (new File(candidatePath).exists()) {
             i += 1
-            newPath = buildPath(i)
+            candidatePath = buildPath(i)
         }
 
-        newPath
+        candidatePath
     }         
-    
 }
