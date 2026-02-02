@@ -408,7 +408,7 @@ object isabellm {
       val nitpickOutput = service.call_nitpick(currentState, thy)
       val cleanOutput = nitpickOutput.replace("\n", " ").toLowerCase
 
-      println(s"   [Nitpick Output]: $nitpickOutput")
+      // println(s"   [Nitpick Output]: $nitpickOutput")
       
       if (cleanOutput.contains("genuine") || cleanOutput.contains("counterexample")) {
           println(s"⚠️ COUNTER-EXAMPLE FOUND:\n$nitpickOutput")
@@ -426,7 +426,9 @@ object isabellm {
       if (result._1 && result._2._2.nonEmpty) {
           val proof = service.extractProof(result._2._2.head)
           println(s"Sledgehammer success: $proof")
-          injectProof(filePath, targetLine, proof) 
+
+          val safeProof = proof + " (*SAFE*)"
+          injectProof(filePath, targetLine, safeProof)
           pendingProof = Some((filePath, currentStatement, proof))
           sledgehammerUsedInRun = true 
           return true
@@ -459,20 +461,22 @@ object isabellm {
        val targetLineText = if (targetLine <= maxLines) fileLines(targetLine - 1) else "EOF"
 
        // =========================================================
-       // STRATEGY: Replace Timeout with 'by auto' to force state change
+       // STRATEGY: Replace Timeout with 'by simp' to force state change
        // =========================================================
        
        val alreadySimple = targetLineText.trim.matches("""^(by|apply)\s*\(?\s*(auto|simp|blast|fastforce)\s*\)?""")
        
        if (!alreadySimple) {
-           println("Timeout on complex method. Swapping for 'by auto' to force verification/failure...")
-           logErrorAndAction(name, targetLineText, isabelleErrors, "Timeout detected. Replaced with 'by auto'.")
+           println(s"Timeout on complex method. Swapping for 'by simp' to force verification/failure...")
+           logErrorAndAction(name, targetLineText, isabelleErrors, "Timeout detected. Replaced with 'by simp'.")
            
-           utils.inject.injectProof(filePath, targetLine, "by auto")
+           // MODIFICATION START: Replace entire line instead of merging
+           val indentation = targetLineText.takeWhile(_.isWhitespace)
+           val cleanLine = indentation + "by simp"
+           utils.inject.injectLine(filePath, targetLine, cleanLine)
+           // MODIFICATION END
            
            // Return true to restart the loop. 
-           // If 'by auto' works -> Success.
-           // If 'by auto' fails -> "Failed to apply..." error caught in next loop -> Sledgehammer called.
            return true 
        }
 
@@ -497,6 +501,35 @@ object isabellm {
           preservedLine = Some(if (targetLine <= maxLines) fileLines(targetLine - 1) else "")
           invokeLLM()
           return !done
+       }
+    }
+
+    if (isabelleErrors.contains("Failed to retrieve literal fact")) {
+       println("Literal fact error detected. Parsing and removing...")
+       
+       // FIXED: Use linesIterator to safely grab exactly one line (the fact) 
+       // instead of a greedy regex that might eat the "At command" line.
+       val badFact = isabelleErrors.linesIterator
+           .dropWhile(l => !l.contains("Failed to retrieve literal fact"))
+           .drop(1) // Skip the "Failed to..." line
+           .nextOption() // Grab the fact line
+           .map(_.trim)
+           .getOrElse("")
+
+       // Extra safety: ensure we didn't accidentally grab the "At command" line if the error format is weird
+       if (badFact.nonEmpty && !badFact.startsWith("At command")) {
+           // Call the new function in utils.undefined
+           val wasRemoved = utils.undefined.processLiteralRemoval(filePath, safeLineNum, badFact)
+           
+           if (wasRemoved) {
+               println(s"   -> Successfully removed invalid fact: '$badFact'")
+               logErrorAndAction(name, lineContent, isabelleErrors, s"Removed invalid literal fact '$badFact'.")
+               return true 
+           } else {
+               println("   -> Could not match fact in source line. Delegating to LLM.")
+           }
+       } else {
+           println("   -> Parsed fact was empty or invalid. Delegating to LLM.")
        }
     }
 

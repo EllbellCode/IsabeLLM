@@ -114,5 +114,13 @@
     {
         "lemma": "lemma n_common_prefix:\n  \"\\<forall>r r'. nCheck n d t \\<and> r\\<in>nLongest t \\<and> r'\\<in>nLongest t \\<longrightarrow> take n r = take n r'\"",
         "proof": "(* Recursive Context *)\ndatatype 'a nTree =\n  nNode 'a \"'a nTree list\"\n\nfun nHeight :: \"'a nTree \\<Rightarrow> nat\" where\n  \"nHeight (nNode x []) = 1\"\n| \"nHeight (nNode x (t # ts)) = Suc (foldr max (map nHeight (t # ts)) 0)\"\n\nfun nPaths :: \"'a nTree \\<Rightarrow> 'a list list\" where\n\"nPaths (nNode x []) = [[x]]\"\n|\"nPaths (nNode x (t#ts)) = map (\\<lambda>p. x # p) (concat (map nPaths (t # ts)))\"\n\nfun nLongest :: \"'a nTree \\<Rightarrow> 'a list set\" where\n\"nLongest t = set (filter (\\<lambda>s. length s = nHeight t) (nPaths t))\"\n\nfun nCheck :: \"nat \\<Rightarrow> nat \\<Rightarrow> 'a nTree \\<Rightarrow> bool\" where\n\"nCheck 0 d t = True\"\n| \"nCheck (Suc n) d (nNode x t) = (\\<exists>p \\<in> set t. (\\<forall>p' \\<in> set t - {p}. nHeight p - nHeight p' > d) \\<and> nCheck n d p)\"\n\n(* Proof *)\nusing check_p by blast"
+    },
+    {
+        "lemma": "lemma height_add_h: \"nHeight (add t) = Suc (nHeight t)\"",
+        "proof": "(* Recursive Context *)\ndatatype 'a nTree =\n  nNode 'a \"'a nTree list\"\n\nfun nHeight :: \"'a nTree \\<Rightarrow> nat\" where\n  \"nHeight (nNode x []) = 1\"\n| \"nHeight (nNode x (t # ts)) = Suc (foldr max (map nHeight (t # ts)) 0)\"\n\n(* Proof *)\nby (metis height_t' m1 max_eq nHeight.simps(2) nTree.inject)"
+    },
+    {
+        "lemma": "lemma nCheck_add_h:\n  \"nCheck n depth t \\<longrightarrow> nCheck n (Suc depth) (add t)\"",
+        "proof": "(* Recursive Context *)\ndatatype 'a nTree =\n  nNode 'a \"'a nTree list\"\n\nfun nHeight :: \"'a nTree \\<Rightarrow> nat\" where\n  \"nHeight (nNode x []) = 1\"\n| \"nHeight (nNode x (t # ts)) = Suc (foldr max (map nHeight (t # ts)) 0)\"\n\nfun nCheck :: \"nat \\<Rightarrow> nat \\<Rightarrow> 'a nTree \\<Rightarrow> bool\" where\n\"nCheck 0 d t = True\"\n| \"nCheck (Suc n) d (nNode x t) = (\\<exists>p \\<in> set t. (\\<forall>p' \\<in> set t - {p}. nHeight p - nHeight p' > d) \\<and> nCheck n d p)\"\n\n(* Proof *)\nby (metis height_add_h m1 n_not_Suc_n)"
     }
 ]

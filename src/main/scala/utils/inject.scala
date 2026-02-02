@@ -12,6 +12,9 @@ object inject {
     val otherKeywords = Set("datatype", "definition", "fun", "value", "section", "record", "text", "locale", "inductive_set")
     val headerKeywords = Set("theory", "imports", "begin")
 
+    // Regex to tokenize facts while respecting quotes, cartouches, and backticks.
+    private val factTokenizer = """(\\<open>[\s\S]*?\\<close>|"[^"]*"|`[^`]*`|[^\s]+)""".r
+
     def injectLemma(newLemma: String, filePath: String, errorLine: Int): Unit = {
         val lines = scala.io.Source.fromFile(filePath).getLines().toIndexedSeq
         
@@ -70,72 +73,61 @@ object inject {
         }
     }
     
-    // NEW: Extracts the raw string of facts, preserving structure like brackets [OF ...]
-    // Stops at 'unfolding', 'by', or 'apply' to avoid capturing keywords as facts.
-    private def extractRawFacts(text: String): Option[String] = {
-        val pattern = """\busing\s+(.*?)\s*(?=\bby\b|\bapply\b|\bunfolding\b|$)""".r
-        pattern.findFirstMatchIn(text).map(_.group(1).trim)
+    // Parses a string of facts into a Set of individual facts
+    private def parseFactsSafe(text: String): Set[String] = {
+        factTokenizer.findAllIn(text).toSet
     }
 
-    // NEW: Extracts simple tokenized facts (safe for Sledgehammer output which is usually simple)
-    private def extractSimpleFacts(text: String): Set[String] = {
-        extractRawFacts(text) match {
-            case Some(raw) => raw.split("\\s+").map(_.trim).filter(_.nonEmpty).toSet
-            case None => Set.empty
-        }
-    }
-    
     def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
         val lines = Source.fromFile(filePath).getLines().toList
         if (lineNumber >= 1 && lineNumber <= lines.length) {
             val originalLine = lines(lineNumber - 1)
-            var finalProof = proof
+            
+            // UPDATED REGEX: 
+            // Now includes \.\. (double dot), \. (dot), sorry, and oops in the capture group.
+            // This ensures they are recognized as the 'method' part and stripped out.
+            val lineParser = """^(\s*)(.*?)(\s+using\s+[\s\S]+?)?(\s*(?:by|apply|unfolding|proof|sorry|oops|\.\.|\.)\b[\s\S]*)?$""".r
 
-            // Merge Logic: If both lines use "using", preserve the old complex facts and add new unique ones.
-            if (proof.trim.startsWith("using") && originalLine.contains("using")) {
-                 
-                 val originalRawOpt = extractRawFacts(originalLine)
-                 val newSimpleFacts = extractSimpleFacts(proof)
-                 
-                 if (originalRawOpt.isDefined) {
-                     val baseFacts = originalRawOpt.get
-                     
-                     // Filter out new facts that are already present in the base string.
-                     // We use word boundaries (\b) to ensure "x" doesn't match inside "max" or "ex".
-                     val factsToAdd = newSimpleFacts.filterNot { f =>
-                         val escaped = java.util.regex.Pattern.quote(f)
-                         s"\\b$escaped\\b".r.findFirstIn(baseFacts).isDefined
-                     }
-                     
-                     if (factsToAdd.nonEmpty) {
-                        println(s"   -> Merging facts: '$baseFacts' + [${factsToAdd.mkString(", ")}]")
-                        
-                        val mergedFacts = baseFacts + " " + factsToAdd.mkString(" ")
-                        
-                        // Extract the method part from the NEW proof (stripping the 'using ...' prefix)
-                        // We use the same regex logic to ensure we strip exactly what we extracted.
-                        val newMethodPart = proof.replaceFirst("""\busing\s+.*?(?=\bby\b|\bapply\b|\bunfolding\b|$)""", "").trim
-                        
-                        finalProof = s"using $mergedFacts $newMethodPart"
-                     }
-                 }
+            val proofParser = """^(?:using\s+([\s\S]+?))?\s*((?:by|apply|unfolding|proof)\b[\s\S]*)?$""".r
+
+            val newLine = originalLine match {
+                case lineParser(indent, command, existingUsingRaw, existingMethod) =>
+                    
+                    val existingFactsStr = if (existingUsingRaw != null) existingUsingRaw.trim.stripPrefix("using").trim else ""
+                    val existingFacts = if (existingFactsStr.nonEmpty) parseFactsSafe(existingFactsStr) else Set.empty[String]
+
+                    val (newFacts, newMethodPart) = proof.trim match {
+                        case proofParser(newUsingStr, methodStr) =>
+                            val nf = if (newUsingStr != null) parseFactsSafe(newUsingStr) else Set.empty[String]
+                            val nm = if (methodStr != null) methodStr.trim else ""
+                            (nf, nm)
+                        case _ => (Set.empty[String], proof.trim) 
+                    }
+
+                    // Merge facts
+                    val mergedFacts = existingFacts ++ newFacts
+                    val finalUsing = if (mergedFacts.nonEmpty) " using " + mergedFacts.mkString(" ") else ""
+                    
+                    // Determine the final method part. 
+                    // If the new proof has a method, use it. Otherwise fallback to existing (unless existing was a dot, in which case we might have issues if new proof has no method, but sledgehammer usually provides 'by ...')
+                    val finalMethod = if (newMethodPart.nonEmpty) newMethodPart else if (existingMethod != null) existingMethod.trim else ""
+                    
+                    s"$indent$command$finalUsing $finalMethod"
+
+                case _ => 
+                    if (originalLine.trim.nonEmpty) s"$originalLine $proof" else proof
             }
 
-            // Cleanup: remove old proof terminators
-            val proofTerminals = """(\s*\b(sorry|oops)\b[\s\S]*$)|(\s*\b(by|apply)\b[\s\S]*$)|(\s*(\.\.|\.)\s*$)"""
-            var cleanedLine = originalLine.replaceAll(proofTerminals, "")
-            
-            // If the final proof has "using", strip any "using" from the original line prefix to avoid duplication.
-            if (finalProof.trim.startsWith("using")) {
-                cleanedLine = cleanedLine.replaceAll("""\s+\busing\b[\s\S]*$""", "")
-            }
-            
-            val updatedLine = cleanedLine + " " + finalProof
-            
-            val updatedLines = lines.updated(lineNumber - 1, updatedLine)
+            val cleanedLine = newLine.replaceAll(" +", " ").trim
+            val finalLine = originalLine.takeWhile(_.isWhitespace) + cleanedLine
+
+            val updatedLines = lines.updated(lineNumber - 1, finalLine)
             val writer = new PrintWriter(new File(filePath))
-            updatedLines.foreach(writer.println)
-            writer.close()
+            try {
+                updatedLines.foreach(writer.println)
+            } finally {
+                writer.close()
+            }
         } else {
             println(s"Error: Line number $lineNumber is out of bounds.")
         }

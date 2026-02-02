@@ -16,7 +16,7 @@ object timeout {
     )
 
     val tacticKeywords = Set(
-        "blast", "metis", "auto"
+        "blast", "metis", "auto", "smt", "presburger", "fastforce"
     )
 
     private def getLinesSafe(filePath: String): List[String] = {

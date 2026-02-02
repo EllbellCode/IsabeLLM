@@ -182,7 +182,7 @@ request = "Please prove this lemma. Return only the raw code without any additio
 fail_return = "Your proof is incorrect. The current proof state is:"
 line_error = "The line: "
 error_message = "produced the following error message:"
-error_request = "Please amend the proof to deal with this error. Return only the raw code without any additional text, explanations, formatting, or commentary. Do not include ``` or language tags. Just the pure code."
+error_request = "Please amend the proof to deal with this error. Unless necessary, you should only modify the proof that caused the error. Return only the raw code without any additional text, explanations, formatting, or commentary. Do not include ``` or language tags. Just the pure code."
 
 def query_llm(prompt, history, rag_context=""):
     try:

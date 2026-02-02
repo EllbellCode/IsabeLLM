@@ -53,7 +53,7 @@ class SledgehammerService(implicit isabelle: Isabelle) {
         |             val p_state = Toplevel.proof_of state;
         |             val params = ${commandsStruct}.default_params thy
         |                [("provers", "cvc5 verit z3 e spass vampire zipperposition"),
-        |                   ("timeout","30"),
+        |                   ("timeout","60"),
         |                   ("verbose","true"), 
         |                   ("slices", "96"),
         |                   ("try0", "true"), 
@@ -113,9 +113,9 @@ class SledgehammerService(implicit isabelle: Isabelle) {
             Await.result(nitpickFuture, 15.seconds)
         } catch {
             case e: Exception => 
-                println(s"!!! NITPICK CRASHED !!!")
-                println(s"Error Message: ${e.getMessage}")
-                "Nitpick timeout or error"
+                // println(s"!!! NITPICK CRASHED !!!")
+                // println(s"Error Message: ${e.getMessage}")
+                "Nitpick timeout"
         }
     }
 

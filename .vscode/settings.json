@@ -1,6 +1,0 @@
-{
-    "remote.autoForwardPortsFallback": 0,
-    "files.watcherExclude": {
-        "**/target": true
-    }
-}
