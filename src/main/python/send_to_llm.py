@@ -190,7 +190,10 @@ def query_llm(prompt, history, rag_context=""):
         messages = [{"role":"system", "content":base_system_content + rag_context}] + history + [{"role":"user", "content":prompt}]
         
         response = client.chat.completions.create(
-            model = "tngtech/deepseek-r1t2-chimera:free",
+            model = 
+            # "tngtech/deepseek-r1t2-chimera:free", NO LONGER AVAILABLE!
+            # "qwen/qwen3-next-80b-a3b-instruct:free", TO TEST
+            "nvidia/nemotron-3-super-120b-a12b:free", 
             messages=messages,
             timeout= 12000
         )

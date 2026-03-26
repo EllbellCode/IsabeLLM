@@ -122,5 +122,13 @@
     {
         "lemma": "lemma nCheck_add_h:\n  \"nCheck n depth t \\<longrightarrow> nCheck n (Suc depth) (add t)\"",
         "proof": "(* Recursive Context *)\ndatatype 'a nTree =\n  nNode 'a \"'a nTree list\"\n\nfun nHeight :: \"'a nTree \\<Rightarrow> nat\" where\n  \"nHeight (nNode x []) = 1\"\n| \"nHeight (nNode x (t # ts)) = Suc (foldr max (map nHeight (t # ts)) 0)\"\n\nfun nCheck :: \"nat \\<Rightarrow> nat \\<Rightarrow> 'a nTree \\<Rightarrow> bool\" where\n\"nCheck 0 d t = True\"\n| \"nCheck (Suc n) d (nNode x t) = (\\<exists>p \\<in> set t. (\\<forall>p' \\<in> set t - {p}. nHeight p - nHeight p' > d) \\<and> nCheck n d p)\"\n\n(* Proof *)\nby (metis height_add_h m1 n_not_Suc_n)"
+    },
+    {
+        "lemma": "lemma subtree_height:\nassumes \"t \\<in> set ts\"\n  shows \"foldr max (map nHeight ts) 0 \\<ge> nHeight t\"",
+        "proof": "(* Recursive Context *)\ndatatype 'a nTree =\n  nNode 'a \"'a nTree list\"\n\nfun nHeight :: \"'a nTree \\<Rightarrow> nat\" where\n  \"nHeight (nNode x []) = 1\"\n| \"nHeight (nNode x (t # ts)) = Suc (foldr max (map nHeight (t # ts)) 0)\"\n\n(* Proof *)\nusing \\<open>foldr max (map nHeight (y # ys)) 0 = max (nHeight y) (foldr max (map nHeight ys) 0)\\<close> \\<open>nHeight t \\<le> foldr max (map nHeight ys) 0\\<close> by linarith"
+    },
+    {
+        "lemma": "lemma subtree_height:\n  assumes \"t \\<in> set ts\"\n  shows \"foldr max (map nHeight ts) 0 \\<ge> nHeight t\"",
+        "proof": "(* Recursive Context *)\ndatatype 'a nTree =\n  nNode 'a \"'a nTree list\"\n\nfun nHeight :: \"'a nTree \\<Rightarrow> nat\" where\n  \"nHeight (nNode x []) = 1\"\n| \"nHeight (nNode x (t # ts)) = Suc (foldr max (map nHeight (t # ts)) 0)\"\n\n(* Proof *)\nusing \\<open>foldr max (map nHeight (y # ys)) 0 = max (nHeight y) (foldr max (map nHeight ys) 0)\\<close> by argo"
     }
 ]

@@ -1,4 +1,3 @@
-
 package llm
 
 // UTILITIES FOR HANDLING THE OUTPUT OF THE LLM API
@@ -53,6 +52,24 @@ object llmOutput {
         }
     }
 
+    def sanitizeIsabelleText(input: String): String = {
+        var clean = input
+        
+        // Split concatenated qeds: "qedqed" -> "qed\nqed"
+        clean = clean.replaceAll("""(qed)(qed)""", "$1\n$2")
+        
+        // Split qed attached to a following lemma: "qedlemma" -> "qed\nlemma"
+        clean = clean.replaceAll("""(qed)(lemma|theorem|proposition)""", "$1\n$2")
+        
+        // Split method closers missing spaces: "by(auto)qed" -> "by(auto)\nqed"
+        clean = clean.replaceAll("""(\))(\s*)(qed|done)""", "$1\n$3")
+
+        // Split "finally show ?thesis.qed" -> "finally show ?thesis .\nqed"
+        clean = clean.replaceAll("""(\.)(qed)""", "$1\n$2")
+
+        clean
+    }
+
     def normalizeWhitespace(s: String): String = s.replaceAll("\\s+", " ").trim
 
     def findStartIndex(rawInput: String, normalizedStatement: String): Option[Int] = {
@@ -79,10 +96,15 @@ object llmOutput {
 
     def findProofBlock(text: String): String = {
         val lines = text.linesIterator.toVector
-        val lastQedIndex = lines.lastIndexWhere(_.trim.matches("""\bqed\b"""))
+        
+        // FIX 1: Relax the boundary to catch typos like "qedqed" or "qed."
+        val lastQedIndex = lines.lastIndexWhere(_.trim.toLowerCase.startsWith("qed"))
+        
+        // FIX 2: Broaden tactic fallback to catch "using ... by", "done", "sorry", or "."
         val lastTacticIndex = lines.lastIndexWhere { line =>
             val l = line.trim.toLowerCase
-            l.startsWith("by ") && tacticKeywords.exists(tk => l.contains(tk))
+            (l.contains("by ") && tacticKeywords.exists(tk => l.contains(tk))) ||
+            l == "done" || l == "sorry" || l == "oops" || l.endsWith(".") || l == "."
         }
 
         val endIndex = (lastQedIndex, lastTacticIndex) match {
@@ -136,7 +158,8 @@ object llmOutput {
     def processOutput(input: String, statement: String): String = {
         println("Processing output...")
         val unicodeStep = replaceUnicode(input)
-        val rawCode = extractCode(unicodeStep, statement)
+        val sanitizedStep = sanitizeIsabelleText(unicodeStep)
+        val rawCode = extractCode(sanitizedStep, statement)
         
         if (rawCode.nonEmpty) {
             val applyStep = replaceApply(rawCode)
@@ -177,12 +200,6 @@ object llmOutput {
                 val exitCode = pythonCommand ! ProcessLogger(stdout.append(_), stderr.append(_))
 
                 val llm_output = stdout.toString().trim
-
-                // println(s"RAW OUTPUT: [$llm_output]")
-
-                // if (stderr.nonEmpty) {
-                //     println(s"🐍 Python Logs:\n$stderr")
-                // }
 
                 if (exitCode != 0 || llm_output.isEmpty) {
                     println(s"❌ Python script failed with exit code $exitCode")

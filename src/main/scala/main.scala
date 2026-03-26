@@ -407,8 +407,6 @@ object isabellm {
       
       val nitpickOutput = service.call_nitpick(currentState, thy)
       val cleanOutput = nitpickOutput.replace("\n", " ").toLowerCase
-
-      // println(s"   [Nitpick Output]: $nitpickOutput")
       
       if (cleanOutput.contains("genuine") || cleanOutput.contains("counterexample")) {
           println(s"⚠️ COUNTER-EXAMPLE FOUND:\n$nitpickOutput")
@@ -557,6 +555,18 @@ object isabellm {
        return true
     }
 
+    if (isabelleErrors.contains("Unbound schematic variable: ?case")) {
+       println("Unbound ?case detected. Swapping for ?thesis...")
+       
+       val fixedLine = lineContent.replace("?case", "?thesis")
+       
+       logErrorAndAction(name, lineContent, isabelleErrors, "Replaced unbound '?case' with '?thesis'.")
+       injectLine(filePath, safeLineNum, fixedLine)
+       
+       return true
+
+    }
+
     if (isabelleErrors.contains("Inner lexical error")) {
        if (containsUnicode(isabelleErrors)) {
           println("Unicode error detected. Normalizing file...")
@@ -568,6 +578,34 @@ object isabellm {
        invokeLLM()
        return !done
     }
+
+    // --- VACUOUS CALCULATION: EXACT KEYWORD SWAP ---
+    if (isabelleErrors.contains("Vacuous calculation result")) {
+       // Extract the exact failing command from the error string (e.g., "also" or "finally")
+       val failedCmd = utils.extract.extractCommand(isabelleErrors)
+       println(s"Vacuous calculation detected at line $safeLineNum on command '$failedCmd'.")
+
+       if (failedCmd == "also") {
+           // Use the line number to create a unique step name natively
+           val stepName = s"step_$safeLineNum"
+           
+           val fixedLine = lineContent.replaceFirst("\\balso\\s+have\\b", s"have $stepName:")
+           val finalLine = if (fixedLine == lineContent) lineContent.replaceFirst("\\balso\\b", "") else fixedLine
+           
+           logErrorAndAction(name, lineContent, isabelleErrors, s"Swapped vacuous 'also' for named fact '$stepName'.")
+           injectLine(filePath, safeLineNum, finalLine)
+           return true
+           
+       } else if (failedCmd == "finally") {
+           // Replace 'finally' with 'then'
+           val fixedLine = lineContent.replaceFirst("\\bfinally\\b", "then")
+           
+           logErrorAndAction(name, lineContent, isabelleErrors, "Swapped broken 'finally' for 'then'.")
+           injectLine(filePath, safeLineNum, fixedLine)
+           return true
+       }
+    }
+    // -----------------------------------------------
 
     println("Alternative error detected. Sending to LLM...")
     invokeLLM()

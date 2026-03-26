@@ -78,17 +78,112 @@ object inject {
         factTokenizer.findAllIn(text).toSet
     }
 
+    // def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
+    //     val lines = Source.fromFile(filePath).getLines().toList
+    //     if (lineNumber >= 1 && lineNumber <= lines.length) {
+    //         val originalLine = lines(lineNumber - 1)
+            
+    //         val lineParser = """^(\s*)(.*?)(\s+using\s+[\s\S]+?)?(\s*(?:by|apply|unfolding|proof|sorry|oops|\.\.|\.)\b[\s\S]*)?$""".r
+
+    //         val proofParser = """^(?:using\s+([\s\S]+?))?\s*((?:by|apply|unfolding|proof)\b[\s\S]*)?$""".r
+
+    //         val newLine = originalLine match {
+    //             case lineParser(indent, command, existingUsingRaw, existingMethod) =>
+                    
+    //                 val existingFactsStr = if (existingUsingRaw != null) existingUsingRaw.trim.stripPrefix("using").trim else ""
+    //                 val existingFacts = if (existingFactsStr.nonEmpty) parseFactsSafe(existingFactsStr) else Set.empty[String]
+
+    //                 val (newFacts, newMethodPart) = proof.trim match {
+    //                     case proofParser(newUsingStr, methodStr) =>
+    //                         val nf = if (newUsingStr != null) parseFactsSafe(newUsingStr) else Set.empty[String]
+    //                         val nm = if (methodStr != null) methodStr.trim else ""
+    //                         (nf, nm)
+    //                     case _ => (Set.empty[String], proof.trim) 
+    //                 }
+
+    //                 // Merge facts
+    //                 val mergedFacts = existingFacts ++ newFacts
+    //                 val finalUsing = if (mergedFacts.nonEmpty) " using " + mergedFacts.mkString(" ") else ""
+                    
+    //                 // Determine the final method part. 
+    //                 // If the new proof has a method, use it. Otherwise fallback to existing (unless existing was a dot, in which case we might have issues if new proof has no method, but sledgehammer usually provides 'by ...')
+    //                 val finalMethod = if (newMethodPart.nonEmpty) newMethodPart else if (existingMethod != null) existingMethod.trim else ""
+                    
+    //                 s"$indent$command$finalUsing $finalMethod"
+
+    //             case _ => 
+    //                 if (originalLine.trim.nonEmpty) s"$originalLine $proof" else proof
+    //         }
+
+    //         val cleanedLine = newLine.replaceAll(" +", " ").trim
+    //         val finalLine = originalLine.takeWhile(_.isWhitespace) + cleanedLine
+
+    //         val updatedLines = lines.updated(lineNumber - 1, finalLine)
+    //         val writer = new PrintWriter(new File(filePath))
+    //         try {
+    //             updatedLines.foreach(writer.println)
+    //         } finally {
+    //             writer.close()
+    //         }
+    //     } else {
+    //         println(s"Error: Line number $lineNumber is out of bounds.")
+    //     }
+
     def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
         val lines = Source.fromFile(filePath).getLines().toList
         if (lineNumber >= 1 && lineNumber <= lines.length) {
+            
+            // --- NEW LOGIC: Handle Multi-line Proof Blocks from LLM ---
+            if (proof.trim.contains("\n")) {
+                // 1. Find the start of the current lemma (search backwards from error line)
+                val lemmaStartOpt = (lineNumber - 1 to 0 by -1).find { i =>
+                    val trimmed = lines(i).trim.toLowerCase
+                    statementKeywords.exists(kw => trimmed.startsWith(kw))
+                }
+
+                if (lemmaStartOpt.isDefined) {
+                    val lemmaStart = lemmaStartOpt.get
+                    
+                    // 2. Find where the old proof actually starts
+                    val proofStartOpt = (lemmaStart until lines.length).find { i =>
+                        val t = lines(i).trim
+                        t.startsWith("proof") || t.startsWith("using") || t.startsWith("by ") || t.startsWith("apply ")
+                    }
+
+                    if (proofStartOpt.isDefined) {
+                        val proofStart = proofStartOpt.get
+                        
+                        // 3. Find the start of the NEXT lemma/block so we know where to stop deleting
+                        val proofEnd = (proofStart + 1 until lines.length).find { i =>
+                            val trimmed = lines(i).trim.toLowerCase
+                            (statementKeywords ++ otherKeywords ++ Set("end")).exists(kw => trimmed.startsWith(kw))
+                        }.getOrElse(lines.length)
+
+                        // 4. Replace the entire old proof block with the new multi-line proof
+                        val updatedLines = lines.slice(0, proofStart) ++ 
+                                           proof.stripLineEnd.split("\n") ++ 
+                                           lines.slice(proofEnd, lines.length)
+
+                        val writer = new PrintWriter(new File(filePath))
+                        try {
+                            updatedLines.foreach(writer.println)
+                        } finally {
+                            writer.close()
+                        }
+                        println(s"Successfully replaced multi-line proof block from line ${proofStart + 1} to $proofEnd")
+                        return // Exit early, we are done!
+                    }
+                }
+            }
+
+            // --- ORIGINAL LOGIC: Handle Single-line (Sledgehammer/Nitpick) fixes ---
             val originalLine = lines(lineNumber - 1)
             
-            // UPDATED REGEX: 
-            // Now includes \.\. (double dot), \. (dot), sorry, and oops in the capture group.
-            // This ensures they are recognized as the 'method' part and stripped out.
-            val lineParser = """^(\s*)(.*?)(\s+using\s+[\s\S]+?)?(\s*(?:by|apply|unfolding|proof|sorry|oops|\.\.|\.)\b[\s\S]*)?$""".r
-
-            val proofParser = """^(?:using\s+([\s\S]+?))?\s*((?:by|apply|unfolding|proof)\b[\s\S]*)?$""".r
+            // val lineParser = """^(\s*)(.*?)(\s+using\s+[\s\S]+?)?(\s*(?:by|apply|unfolding|proof|sorry|oops|\.\.|\.)\b[\s\S]*)?$""".r
+            // val lineParser = """^(\s*)(.*?)(\s+using\s+[\s\S]+?)?(\s*(?:(?:by|apply|unfolding|proof|sorry|oops)\b|\.\.|\.)[\s\S]*)?$""".r
+            // val proofParser = """^(?:using\s+([\s\S]+?))?\s*((?:by|apply|unfolding|proof)\b[\s\S]*)?$""".r
+            val lineParser = """^(\s*)((?:"[^"]*"|`[^`]*`|\\<open>[\s\S]*?\\<close>|(?:(?!\\<open>)[^"`]))*?)(\s+using\s+[\s\S]+?)?(\s*(?:(?:by|apply|unfolding|proof|sorry|oops)\b|\.\.|\.)[\s\S]*)?$""".r
+            val proofParser = """^(?:using\s+((?:"[^"]*"|`[^`]*`|\\<open>[\s\S]*?\\<close>|(?:(?!\\<open>)[^"`]))*?))?\s*((?:(?:by|apply|unfolding|proof)\b|\.\.|\.)[\s\S]*)?$""".r
 
             val newLine = originalLine match {
                 case lineParser(indent, command, existingUsingRaw, existingMethod) =>
@@ -104,12 +199,8 @@ object inject {
                         case _ => (Set.empty[String], proof.trim) 
                     }
 
-                    // Merge facts
                     val mergedFacts = existingFacts ++ newFacts
                     val finalUsing = if (mergedFacts.nonEmpty) " using " + mergedFacts.mkString(" ") else ""
-                    
-                    // Determine the final method part. 
-                    // If the new proof has a method, use it. Otherwise fallback to existing (unless existing was a dot, in which case we might have issues if new proof has no method, but sledgehammer usually provides 'by ...')
                     val finalMethod = if (newMethodPart.nonEmpty) newMethodPart else if (existingMethod != null) existingMethod.trim else ""
                     
                     s"$indent$command$finalUsing $finalMethod"
@@ -132,4 +223,5 @@ object inject {
             println(s"Error: Line number $lineNumber is out of bounds.")
         }
     }
+
 }
