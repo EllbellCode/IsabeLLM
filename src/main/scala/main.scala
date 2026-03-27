@@ -34,7 +34,7 @@ object isabellm {
   val testResults = ArrayBuffer[TestResult]()
   
   // Configuration
-  val totalTestRuns = 1     
+  val totalTestRuns = 3     
   val maxTestIters = 5
   val timeout = 20  //seconds 
 
@@ -90,8 +90,12 @@ object isabellm {
     println("Initialising Sledgehammer Service...")
     val service = new SledgehammerService()
 
-    val originalTheoryContent = extractText(theoryPath)
-    println(s"💾 Original theory content loaded (${originalTheoryContent.length} chars).")
+    val rawTheoryContent = extractText(theoryPath)
+    val originalTheoryContent = utils.extract.formatProofSteps(rawTheoryContent)
+    
+    println(s"💾 Original theory content loaded and pre-formatted (${originalTheoryContent.length} chars).")
+
+    utils.inject.injectAll(theoryPath, originalTheoryContent)
 
     try {
         for (run <- 1 to totalTestRuns) {
@@ -326,7 +330,11 @@ object isabellm {
               )
               
               if (generatedProof.isDefined) {
-                val code = generatedProof.get.trim
+                
+                val rawCode = generatedProof.get.trim
+                
+                val code = formatProofSteps(rawCode)
+                
                 val isFullBlock = Set("lemma", "theorem", "proposition", "corollary").exists(kw => code.startsWith(kw))
                 
                 if (isFullBlock) {
@@ -369,8 +377,7 @@ object isabellm {
 
     if (isabelleErrors.contains("Failed to finish proof") || 
         isabelleErrors.contains("Failed to apply initial proof method") ||
-        isabelleErrors.contains("Malformed command syntax") ||
-        isabelleErrors.contains("Illegal application of proof command")) { 
+        isabelleErrors.contains("Malformed command syntax")) { 
       
       if (isabelleErrors.contains("No subgoals!")) {
         println("No subgoals detected! Cleaning up line...")
@@ -531,7 +538,7 @@ object isabellm {
        }
     }
 
-    if (isabelleErrors.contains("Undefined")) {
+    if (isabelleErrors.contains("Undefined method") || isabelleErrors.contains("Undefined fact")) {
        println("Undefined fact detected...")
        val undef = extractUndefined(isabelleErrors)
        
@@ -579,14 +586,13 @@ object isabellm {
        return !done
     }
 
-    // --- VACUOUS CALCULATION: EXACT KEYWORD SWAP ---
     if (isabelleErrors.contains("Vacuous calculation result")) {
-       // Extract the exact failing command from the error string (e.g., "also" or "finally")
+       
        val failedCmd = utils.extract.extractCommand(isabelleErrors)
        println(s"Vacuous calculation detected at line $safeLineNum on command '$failedCmd'.")
 
        if (failedCmd == "also") {
-           // Use the line number to create a unique step name natively
+           
            val stepName = s"step_$safeLineNum"
            
            val fixedLine = lineContent.replaceFirst("\\balso\\s+have\\b", s"have $stepName:")
@@ -597,7 +603,7 @@ object isabellm {
            return true
            
        } else if (failedCmd == "finally") {
-           // Replace 'finally' with 'then'
+           
            val fixedLine = lineContent.replaceFirst("\\bfinally\\b", "then")
            
            logErrorAndAction(name, lineContent, isabelleErrors, "Swapped broken 'finally' for 'then'.")
@@ -605,7 +611,72 @@ object isabellm {
            return true
        }
     }
-    // -----------------------------------------------
+
+    if (isabelleErrors.contains("Illegal application of proof command")) {
+      val failedCmd = utils.extract.extractCommand(isabelleErrors)
+      
+      if (failedCmd == "proof") {
+          println("Detected 'proof' command in state mode. Inserting initiation...")
+          
+          val indent = lineContent.takeWhile(_.isWhitespace)
+          
+          val isInsideCase = fileLines.take(safeLineNum).reverse.exists(_.trim.startsWith("case"))
+          val goal = if (isInsideCase) "?case" else "?thesis"
+          
+          val initiationLine = s"${indent}show $goal"
+          
+          utils.inject.insertLine(filePath, safeLineNum, initiationLine)
+          
+          logErrorAndAction(name, lineContent, isabelleErrors, s"Inserted '$initiationLine' to initiate proof state.")
+          return true 
+      }
+    }
+
+    if (isabelleErrors.contains("Bad arguments")) {
+
+       val fixedLine = lineContent.replaceAll(":\\s*[^)]*(?=\\))", "")
+
+       if (fixedLine != lineContent) {
+           logErrorAndAction(name, lineContent, isabelleErrors, "Removed invalid colon and arguments from method.")
+           utils.inject.injectLine(filePath, safeLineNum, fixedLine)
+           return true
+       } else {
+           println("Could not cleanly identify the bad argument. Delegating to LLM...")
+           invokeLLM()
+           return !done
+       }
+    }
+
+    if (isabelleErrors.contains("No calculation yet")) {
+       
+       val failedCmd = utils.extract.extractCommand(isabelleErrors)
+       
+       if (failedCmd == "finally" || lineContent.trim.startsWith("finally")) {
+            
+           val fixedLine = lineContent.replaceFirst("\\bfinally\\b", "then")
+           
+           logErrorAndAction(name, lineContent, isabelleErrors, "Swapped broken 'finally' for 'then' (No calculation yet).")
+           utils.inject.injectLine(filePath, safeLineNum, fixedLine)
+           return true
+       }
+    }
+
+    if (isabelleErrors.contains("Outer syntax error") && isabelleErrors.contains("name expected") && isabelleErrors.contains("keyword [")) {
+       
+        val pattern = """(.*)\[([^\[\]]*)\](.*)""".r
+       
+        val fixedLine = lineContent match {
+            case pattern(prefix, inner, suffix) => prefix + inner + suffix
+            case _ => lineContent
+        }
+       
+        if (fixedLine != lineContent) {
+            logErrorAndAction(name, lineContent, isabelleErrors, "Stripped malformed square brackets (kept inner content).")
+            utils.inject.injectLine(filePath, safeLineNum, fixedLine)
+            return true
+        } else {
+        }
+    }
 
     println("Alternative error detected. Sending to LLM...")
     invokeLLM()

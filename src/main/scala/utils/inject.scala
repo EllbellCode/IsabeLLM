@@ -78,57 +78,6 @@ object inject {
         factTokenizer.findAllIn(text).toSet
     }
 
-    // def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
-    //     val lines = Source.fromFile(filePath).getLines().toList
-    //     if (lineNumber >= 1 && lineNumber <= lines.length) {
-    //         val originalLine = lines(lineNumber - 1)
-            
-    //         val lineParser = """^(\s*)(.*?)(\s+using\s+[\s\S]+?)?(\s*(?:by|apply|unfolding|proof|sorry|oops|\.\.|\.)\b[\s\S]*)?$""".r
-
-    //         val proofParser = """^(?:using\s+([\s\S]+?))?\s*((?:by|apply|unfolding|proof)\b[\s\S]*)?$""".r
-
-    //         val newLine = originalLine match {
-    //             case lineParser(indent, command, existingUsingRaw, existingMethod) =>
-                    
-    //                 val existingFactsStr = if (existingUsingRaw != null) existingUsingRaw.trim.stripPrefix("using").trim else ""
-    //                 val existingFacts = if (existingFactsStr.nonEmpty) parseFactsSafe(existingFactsStr) else Set.empty[String]
-
-    //                 val (newFacts, newMethodPart) = proof.trim match {
-    //                     case proofParser(newUsingStr, methodStr) =>
-    //                         val nf = if (newUsingStr != null) parseFactsSafe(newUsingStr) else Set.empty[String]
-    //                         val nm = if (methodStr != null) methodStr.trim else ""
-    //                         (nf, nm)
-    //                     case _ => (Set.empty[String], proof.trim) 
-    //                 }
-
-    //                 // Merge facts
-    //                 val mergedFacts = existingFacts ++ newFacts
-    //                 val finalUsing = if (mergedFacts.nonEmpty) " using " + mergedFacts.mkString(" ") else ""
-                    
-    //                 // Determine the final method part. 
-    //                 // If the new proof has a method, use it. Otherwise fallback to existing (unless existing was a dot, in which case we might have issues if new proof has no method, but sledgehammer usually provides 'by ...')
-    //                 val finalMethod = if (newMethodPart.nonEmpty) newMethodPart else if (existingMethod != null) existingMethod.trim else ""
-                    
-    //                 s"$indent$command$finalUsing $finalMethod"
-
-    //             case _ => 
-    //                 if (originalLine.trim.nonEmpty) s"$originalLine $proof" else proof
-    //         }
-
-    //         val cleanedLine = newLine.replaceAll(" +", " ").trim
-    //         val finalLine = originalLine.takeWhile(_.isWhitespace) + cleanedLine
-
-    //         val updatedLines = lines.updated(lineNumber - 1, finalLine)
-    //         val writer = new PrintWriter(new File(filePath))
-    //         try {
-    //             updatedLines.foreach(writer.println)
-    //         } finally {
-    //             writer.close()
-    //         }
-    //     } else {
-    //         println(s"Error: Line number $lineNumber is out of bounds.")
-    //     }
-
     def injectProof(filePath: String, lineNumber: Int, proof: String): Unit = {
         val lines = Source.fromFile(filePath).getLines().toList
         if (lineNumber >= 1 && lineNumber <= lines.length) {
@@ -176,15 +125,12 @@ object inject {
                 }
             }
 
-            // --- ORIGINAL LOGIC: Handle Single-line (Sledgehammer/Nitpick) fixes ---
             val originalLine = lines(lineNumber - 1)
             
-            // val lineParser = """^(\s*)(.*?)(\s+using\s+[\s\S]+?)?(\s*(?:by|apply|unfolding|proof|sorry|oops|\.\.|\.)\b[\s\S]*)?$""".r
-            // val lineParser = """^(\s*)(.*?)(\s+using\s+[\s\S]+?)?(\s*(?:(?:by|apply|unfolding|proof|sorry|oops)\b|\.\.|\.)[\s\S]*)?$""".r
-            // val proofParser = """^(?:using\s+([\s\S]+?))?\s*((?:by|apply|unfolding|proof)\b[\s\S]*)?$""".r
-            val lineParser = """^(\s*)((?:"[^"]*"|`[^`]*`|\\<open>[\s\S]*?\\<close>|(?:(?!\\<open>)[^"`]))*?)(\s+using\s+[\s\S]+?)?(\s*(?:(?:by|apply|unfolding|proof|sorry|oops)\b|\.\.|\.)[\s\S]*)?$""".r
-            val proofParser = """^(?:using\s+((?:"[^"]*"|`[^`]*`|\\<open>[\s\S]*?\\<close>|(?:(?!\\<open>)[^"`]))*?))?\s*((?:(?:by|apply|unfolding|proof)\b|\.\.|\.)[\s\S]*)?$""".r
-
+           
+            val lineParser = """^(\s*)((?:"[^"]*"|`[^`]*`|\\<open>[\s\S]*?\\<close>|(?:(?!\\<open>)[^"`]))*?)(\s+using\s+[\s\S]+?)?(\s*(?:(?:by|apply|unfolding|proof|sorry|oops)\b|(?:\.\.|\.)(?=\s|$))[\s\S]*)?$""".r
+            val proofParser = """^(?:using\s+((?:"[^"]*"|`[^`]*`|\\<open>[\s\S]*?\\<close>|(?:(?!\\<open>)[^"`]))*?))?\s*((?:(?:by|apply|unfolding|proof)\b|(?:\.\.|\.)(?=\s|$))[\s\S]*)?$""".r
+            
             val newLine = originalLine match {
                 case lineParser(indent, command, existingUsingRaw, existingMethod) =>
                     
@@ -221,6 +167,24 @@ object inject {
             }
         } else {
             println(s"Error: Line number $lineNumber is out of bounds.")
+        }
+    }
+
+    def insertLine(filePath: String, lineNumber: Int, newText: String): Unit = {
+        val lines = Source.fromFile(filePath).getLines().toList
+        if (lineNumber >= 1 && lineNumber <= lines.length + 1) {
+            
+            val (before, after) = lines.splitAt(lineNumber - 1)
+            val updatedLines = before ++ List(newText) ++ after
+            
+            val writer = new PrintWriter(new File(filePath))
+            try {
+                updatedLines.foreach(writer.println)
+            } finally {
+                writer.close()
+            }
+        } else {
+            println(s"Error: Insertion line number $lineNumber is out of bounds.")
         }
     }
 

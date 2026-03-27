@@ -68,7 +68,6 @@ class SledgehammerService(implicit isabelle: Isabelle) {
         |""".stripMargin
     )
 
-    // IMPROVED: Parsing YXML to plain text
     lazy val nitpickML: MLFunction2[ToplevelState, Theory, String] = 
     compileFunction[ToplevelState, Theory, String](
         s""" fn (state, thy) =>
@@ -77,7 +76,7 @@ class SledgehammerService(implicit isabelle: Isabelle) {
         |       
         |       (* Use default params to avoid type errors *)
         |       val params = ${nitpickCmdStruct}.default_params thy 
-        |           [("timeout", "10"), ("expect", "genuine"), ("batch_size", "1")];
+        |           [("timeout", "5"), ("expect", "genuine"), ("batch_size", "1")];
         |       
         |       val mode = ${nitpickStruct}.Auto_Try; 
         |       val i = 1;      
@@ -85,7 +84,6 @@ class SledgehammerService(implicit isabelle: Isabelle) {
         |       
         |       val (outcome, messages) = ${nitpickStruct}.pick_nits_in_subgoal p_state params mode i step;
         |       
-        |       (* CRITICAL FIX: Clean YXML markup from messages *)
         |       val cleaned_msgs = map (fn s => XML.content_of (YXML.parse_body s)) messages;
         |       val combined_msg = space_implode "\\n" cleaned_msgs;
         |    in
@@ -110,7 +108,7 @@ class SledgehammerService(implicit isabelle: Isabelle) {
             nitpickML(currentState, currentThy).force.retrieveNow
         }
         try {
-            Await.result(nitpickFuture, 15.seconds)
+            Await.result(nitpickFuture, 10.seconds)
         } catch {
             case e: Exception => 
                 // println(s"!!! NITPICK CRASHED !!!")

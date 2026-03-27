@@ -90,18 +90,25 @@ def update_json_mirror(lemma_text, proof_code):
         except: data = []
     else: data = []
 
+    new_core = extract_core_statement(lemma_text)
+    
     found = False
     for entry in data:
-        if entry['lemma'] == lemma_text:
+       
+        if extract_core_statement(entry['lemma']) == new_core:
             entry['proof'] = proof_code
+            entry['lemma'] = lemma_text
             found = True
             break
+            
     if not found: data.append({"lemma": lemma_text, "proof": proof_code})
 
     with open(JSON_MIRROR_FILE, "w") as f: json.dump(data, f, indent=4)
 
 def store_proof(thy_path, lemma_text, proof_code, overwrite=True):
-    proof_id = hashlib.md5(lemma_text.encode()).hexdigest()
+   
+    core_stmt = extract_core_statement(lemma_text)
+    proof_id = hashlib.md5(core_stmt.encode()).hexdigest()
 
     if not overwrite:
         existing = collection.get(ids=[proof_id])
@@ -116,7 +123,7 @@ def store_proof(thy_path, lemma_text, proof_code, overwrite=True):
         documents=[final_proof],
         embeddings=[embedding],
         metadatas=[{"lemma": lemma_text}],
-        ids=[proof_id]
+        ids=[proof_id] 
     )
 
     update_json_mirror(lemma_text, final_proof)
@@ -227,7 +234,7 @@ if __name__ == "__main__":
         thy_path = sys.argv[2]
         lemma = sys.argv[3]
         proof = sys.argv[4]
-        store_proof(thy_path, lemma, proof, overwrite=True)
+        store_proof(thy_path, lemma, proof, overwrite=False)
         
     else:
         thy = sys.argv[1]

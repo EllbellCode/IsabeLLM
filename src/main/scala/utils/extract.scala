@@ -204,4 +204,59 @@ object extract {
         }
         result.toString().stripTrailing()
     }
+
+    def formatProofSteps(proofCode: String): String = {
+        val targetKeywords = Set(
+            "have", "show", "obtain", "then", "hence", "thus", 
+            "also", "finally", "moreover", "ultimately", 
+            "next", "qed", "done", "proof", "case"
+        )
+        
+        val modifierWords = Set("then", "hence", "thus", "from", "with", "also", "finally", "and")
+
+        // 1. Aggressively normalize ALL Unicode space separators (including NBSP) into standard spaces
+        val normalizedCode = proofCode.replaceAll("\\p{Zs}", " ")
+
+        val lines = normalizedCode.split("\n", -1)
+        
+        val formattedLines = lines.map { line =>
+            val leadingSpaces = line.takeWhile(_ == ' ')
+            
+            // 2. Tokenize the line. This matches:
+            // - Double quoted strings ("...")
+            // - Isabelle cartouches (\<open>...\<close>)
+            // - Any continuous block of non-whitespace characters (\S+)
+            val tokenPattern = """("[^"]*"|\\<open>.*?\\<close>|\S+)""".r
+            val tokens = tokenPattern.findAllMatchIn(line).map(_.group(1)).toList
+            
+            val newLn = new StringBuilder(leadingSpaces)
+            var lastWord = ""
+            
+            for (i <- tokens.indices) {
+                val token = tokens(i)
+                val cleanToken = token.replaceAll("[^a-zA-Z]", "") // Strip punctuation to check keywords
+                
+                if (targetKeywords.contains(cleanToken) && i > 0) {
+                    // Split if the previous word was NOT a modifier
+                    if (!modifierWords.contains(lastWord)) {
+                        newLn.append("\n").append(leadingSpaces)
+                    } else {
+                        newLn.append(" ")
+                    }
+                } else if (i > 0) {
+                    newLn.append(" ")
+                }
+                
+                newLn.append(token)
+                
+                // Update last word (ignore strings, cartouches, and Isabelle comments)
+                if (cleanToken.nonEmpty && !token.startsWith("\"") && !token.startsWith("\\<open>") && !token.startsWith("(*")) {
+                    lastWord = cleanToken
+                }
+            }
+            newLn.toString
+        }
+        
+        formattedLines.mkString("\n")
+    }
 }

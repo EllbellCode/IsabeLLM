@@ -26,10 +26,27 @@ object undefined {
 
     def removeWord(currentText: String, lineNumber: Int, word: String): String = {
         val lines = currentText.split("\n", -1).toList
-        val pattern = ("""(\s*|;)""" + Pattern.quote(word) + """(\[[^\]]*\])?""").r
+        
+        val qWord = java.util.regex.Pattern.quote(word)
+        
+        val pattern = s"""(?<![\\w'])$qWord(?![\\w'])\\s*,?""".r
 
         lines.zipWithIndex.map {
-            case (line, idx) if idx == lineNumber - 1 => pattern.replaceAllIn(line, "").replaceAll("\\s+", " ").trim
+            case (line, idx) if idx == lineNumber - 1 =>
+                val indentation = line.takeWhile(_.isWhitespace)
+                
+                var cleaned = pattern.replaceAllIn(line, "")
+                
+                cleaned = cleaned.replace("(, ", "(").replace("(,", "(")
+                cleaned = cleaned.replace(", )", ")").replace(",)", ")")
+                cleaned = cleaned.replaceAll(",\\s*,", ",")
+                
+                cleaned = cleaned.replace("( )", "").replace("()", "")
+                
+                cleaned = cleaned.replaceAll("\\s+", " ").trim
+                
+                if (cleaned.isEmpty) "" else indentation + cleaned
+                
             case (line, _) => line
         }.mkString("\n")
     }
@@ -65,8 +82,6 @@ object undefined {
         val writer = new PrintWriter(expandedPath)
         try updatedLines.foreach(writer.println) finally writer.close()
     }
-
-    // --- NEW FUNCTIONALITY START ---
     
     def processLiteralRemoval(filePath: String, lineNumber: Int, fact: String): Boolean = {
         val currentText = readFile(filePath)
@@ -76,7 +91,6 @@ object undefined {
         
         val lineContent = lines(lineNumber - 1)
         
-        // 1. Map Unicode to ASCII
         val replacements = Map(
             "∈" -> "\\<in>", "∉" -> "\\<notin>", "∀" -> "\\<forall>", 
             "∃" -> "\\<exists>", "⟶" -> "\\<longrightarrow>", "⟹" -> "\\<Longrightarrow>",
@@ -84,37 +98,25 @@ object undefined {
         )
         val asciiFact = replacements.foldLeft(fact) { case (s, (u, a)) => s.replace(u, a) }
 
-        // 2. Prepare variations (Raw, ASCII) and escape for Regex
         val qFact = Pattern.quote(fact)
         val qAscii = Pattern.quote(asciiFact)
 
-        // 3. Define flexible quote pattern (Matches ", `, \<open>)
-        // We allow optional whitespace inside the quotes
         val quoteStart = """(?:"|`|\\<open>)\s*"""
         val quoteEnd   = """\s*(?:"|`|\\<close>)"""
         
-        // 4. STRATEGY A: Handle "from fact ..." case
-        // If we see "from `fact` obtain", we want to delete "from `fact` " entirely.
-        val fromPattern = s"""\\bfrom\\s+(?:$quoteStart)?(?:$qAscii|$qFact)(?:$quoteEnd)?\\s*""".r
+       val fromPattern = s"""\\bfrom\\s+(?:$quoteStart)?(?:$qAscii|$qFact)(?:$quoteEnd)?\\s*""".r
         
         var newLine = fromPattern.replaceFirstIn(lineContent, "")
-
-        // 5. STRATEGY B: Handle "using fact" or "by (metis fact)" (Existing logic)
         if (newLine == lineContent) {
-             // Matches \<open> FACT \<close> OR " FACT " OR ` FACT `
-             val patternGeneral = s"""(?:$quoteStart)(?:$qAscii|$qFact)(?:$quoteEnd)""".r
-             newLine = patternGeneral.replaceAllIn(lineContent, "")
+            val patternGeneral = s"""(?:$quoteStart)(?:$qAscii|$qFact)(?:$quoteEnd)""".r
+            newLine = patternGeneral.replaceAllIn(lineContent, "")
         }
 
-        // 6. Clean up formatting
         newLine = newLine.replaceAll("\\s+", " ").trim
         newLine = newLine.replace("using by", "by") 
-        // Fix case where removal leaves a leading comma or dangling syntax
         newLine = newLine.replace("(,", "(").replace(", )", ")") 
 
         if (newLine != lineContent) {
-            // If we emptied the line effectively but it's not a 'by' line, we might want to keep it empty
-            // But for 'from obtain', the result should be 'obtain ...' which is valid.
             
             lines(lineNumber - 1) = newLine
             writeFile(filePath, lines.mkString("\n"))
@@ -122,7 +124,6 @@ object undefined {
         }
         false
     }
-    // --- NEW FUNCTIONALITY END ---
 
     def checkUndefined(input: String): String = {
         methods.collectFirst {
@@ -140,9 +141,15 @@ object undefined {
 
     def processUndefined(filePath: String, lineNumber: Int, word: String): Unit = {
         val currentText = readFile(filePath)
-        val newText = if (methods.exists(word.contains)) {
-            val newWord = methods.collectFirst { case m if word.startsWith(m) => m }.getOrElse(word)
+        
+        val matchedMethod = methods.find(m => word == m || word.startsWith(m + "."))
+        
+        val newText = if (word.endsWith("qed") && word.length > 3) {
+            
+            val newWord = word.stripSuffix("qed") + " qed"
             replaceWord(currentText, lineNumber, word, newWord)
+        } else if (matchedMethod.isDefined) {
+            replaceWord(currentText, lineNumber, word, matchedMethod.get)
         } else if (suffix.exists(s => word.endsWith("." + s))) {
             val newWord = word.split('.').head
             replaceWord(currentText, lineNumber, word, newWord)
