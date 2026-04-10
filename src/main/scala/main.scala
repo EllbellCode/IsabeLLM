@@ -34,8 +34,8 @@ object isabellm {
   val testResults = ArrayBuffer[TestResult]()
   
   // Configuration
-  val totalTestRuns = 3     
-  val maxTestIters = 5
+  val totalTestRuns = 5     
+  val maxTestIters = 3
   val timeout = 20  //seconds 
 
   // Session Variables 
@@ -331,7 +331,7 @@ object isabellm {
               
               if (generatedProof.isDefined) {
                 
-                val rawCode = generatedProof.get.trim
+                val rawCode = generatedProof.get.trim.replaceAll("\\bassmsproof\\b", "assms\nproof")
                 
                 val code = formatProofSteps(rawCode)
                 

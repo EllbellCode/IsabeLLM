@@ -200,10 +200,16 @@ def query_llm(prompt, history, rag_context=""):
             model = 
             # "tngtech/deepseek-r1t2-chimera:free", NO LONGER AVAILABLE!
             # "qwen/qwen3-next-80b-a3b-instruct:free", TO TEST
-            "nvidia/nemotron-3-super-120b-a12b:free", 
+            "nvidia/nemotron-3-super-120b-a12b:free",
+            # "openai/gpt-oss-120b:free",
             messages=messages,
-            timeout= 12000
+            # timeout= 12000
         )
+
+        if not hasattr(response, "choices") or not response.choices:
+            sys.stderr.write("\n🚨 API REJECTED THE REQUEST 🚨\n")
+            sys.stderr.write(f"Raw OpenRouter Response: {response}\n")
+            return "", history
         
         choice = response.choices[0]
         reply = choice.message.content
